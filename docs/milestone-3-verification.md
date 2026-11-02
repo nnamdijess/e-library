@@ -65,8 +65,9 @@ sanitization and stable anchor versioning must be resolved in the reader milesto
 Browser automation reports that its access host is unavailable. The rendered
 upload form, grid, responsive layout, and client hydration have not been visually
 verified. Follow the README's manual upload/reload/restart sequence on Windows.
-Android, iPadOS 12.5.8, and Linux/server execution remain unverified. The iPad
-compatibility decision is still required before reader implementation.
+Android, iPadOS 12.5.8, and Linux/server execution remain unverified. The owner
+subsequently prioritized the usable Windows/Android MVP; dedicated iPad
+compatibility work is deferred and no longer blocks reader implementation.
 
 ## Compatibility follow-up: duplicate EPUB cover IDs
 

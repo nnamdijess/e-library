@@ -3,6 +3,13 @@
 Milestones 1–3 are approved and implemented. Each later milestone needs review
 before work starts. Readers and progress remain future scope.
 
+The owner has prioritized a working, usable app on Windows and Android. Complete
+the online EPUB/PDF reading and progress milestones before dedicated older-iPad
+compatibility work. iPad compatibility remains a goal and is not a gate on the
+next reader milestone. A separate legacy interface is an option, not an approved
+implementation. Avoid adding offline, annotation, or statistics work ahead of
+the online MVP.
+
 | Milestone | Acceptance | Learning focus |
 | --- | --- | --- |
 | 1. Foundation | Frontend reaches local API; health test, type check, build, setup documentation | HTTP boundary, application factory, configuration, Git |
@@ -19,7 +26,7 @@ reading, statistics, and advanced synchronization are future scope.
 ## Architecture boundaries
 
 Next.js owns the interface. FastAPI owns authorization, ingestion, persistence,
-and controlled file access. SQLite will store metadata and user state; a private
+and controlled file access. SQLite stores metadata and user state; a private
 filesystem directory stores immutable originals and generated JPEG covers.
 Milestone 3 adds staged ingestion, cover delivery, and a unified catalog grid.
 EPUB and PDF get separate engines with a shared progress API.
@@ -30,16 +37,18 @@ cross-device conflict resolution come later.
 
 ## iPadOS 12.5.8 requirement
 
-The owner reports an iPad running iPadOS 12.5.8. This is a required compatibility
-target to investigate, not a supported platform claim for the current scaffold.
-Windows and Android are the initially available test devices.
+The owner reports an iPad running iPadOS 12.5.8 and has connected it to Tailscale
+using an older client. This observed connection is useful, but does not establish
+browser/reader compatibility or continued network reachability. Windows and
+Android are the first acceptance targets. Dedicated iPad compatibility testing
+is deferred until the core online reading workflow is usable.
 
 Current Next.js documentation specifies Safari 16.4+; the current PDF.js legacy
 build lists Safari 18+ with qualifications. Therefore, current default builds
 cannot be assumed to work on the older iPad. A lower TypeScript target alone
 does not fix framework dependencies, browser APIs, or rendering-engine support.
 
-Before reader implementation, review these options with the owner:
+Keep these options for the later compatibility review:
 
 1. Investigate a separately bundled legacy reader/interface against the same
    REST API. This increases build and maintenance work and still needs device tests.
@@ -48,8 +57,20 @@ Before reader implementation, review these options with the owner:
 3. Agree on a reduced iPad feature set if the owner prefers that compromise.
 
 Do not silently drop the requirement, claim compatibility from browser emulation,
-or pin unsupported old packages just to target the device. The modern scaffold
-is a foundation for local development, not a final compatibility decision.
+or pin unsupported old packages just to target the device. Do not rewrite the
+current frontend or build a legacy client before that review. Continue to keep
+reading engines separate from the library interface, use versioned EPUB/PDF
+locations, and share server-side authorization and progress rules. This preserves
+the option of a lightweight interface later without duplicating the library.
+
+## Next implementation checkpoint
+
+Proposed Milestone 4 scope: open a library EPUB in a browser reader, navigate
+pages and chapters, show its table of contents, return to the library, and expose
+CFI location events behind a reader adapter. Safe content delivery and script/
+external-resource restrictions are prerequisites. Test on current Windows and
+Android browsers. Durable progress belongs to Milestone 6; PDF rendering belongs
+to Milestone 5. The next major implementation still needs the owner's approval.
 
 Sources checked during Milestone 1:
 
@@ -62,3 +83,9 @@ Local development binds to 127.0.0.1. Authentication, SQLite persistence, and pr
 production hardening, Docker, and Tailscale configuration remain future work. Never modify
 Vaulted, Nextcloud, or other existing services as part of this project without
 separate explicit authorization. No server access is assumed.
+
+A read-only Windows Tailscale inspection found no existing Serve configuration.
+The service reported a stale network map and inability to reach its coordination
+server, so a listed peer is not proof of current reachability. A private HTTPS
+test-access procedure is prepared in `private-test-access.md`; it has not been
+activated. This networking follow-up must not block local reader development.

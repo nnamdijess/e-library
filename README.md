@@ -307,8 +307,13 @@ check makes retrying identical bytes safe. Reading buttons are not present yet.
 
 The backend cookie is scoped to `/api`, so test authenticated API access through
 the frontend origin, not a different hostname. Tests passed on Windows; Android
-and iPadOS 12.5.8 have not been verified. See the development plan for the iPad
-compatibility decision that remains before reader implementation.
+and iPadOS 12.5.8 have not been verified. Core reading development now prioritizes
+Windows and Android; dedicated older-iPad compatibility work follows the usable
+online MVP. See the development plan for the retained compatibility requirements.
+
+A private HTTPS test-access procedure is prepared in
+[docs/private-test-access.md](docs/private-test-access.md). It has not been
+activated and is not a prerequisite for local reader development.
 
 ## Database and recovery
 
