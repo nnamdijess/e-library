@@ -1,0 +1,24 @@
+# Local configuration and private library data
+.env
+.env.*
+!.env.example
+data/
+
+# Dependencies and generated output
+.venv/
+node_modules/
+.next/
+next-env.d.ts
+out/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+*.tsbuildinfo
+.cache/
+*.log
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/

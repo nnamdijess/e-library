@@ -1,0 +1,8 @@
+# Direct dependencies. requirements.txt will lock the full tested environment.
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic-settings==2.16.2
+
+# Local development/test dependencies; no database or readers yet.
+pytest==9.2.0
+httpx==0.28.1
