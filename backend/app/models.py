@@ -3,7 +3,7 @@
 import time
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -72,3 +72,19 @@ class Book(Base):
     @property
     def has_cover(self) -> bool:
         return self.cover_key is not None
+
+
+class ReadingProgress(Base):
+    __tablename__ = "reading_progress"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="progress_revision"),
+        CheckConstraint("percentage >= 0 AND percentage <= 1", name="progress_percentage"),
+    )
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    book_id: Mapped[str] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), primary_key=True)
+    location: Mapped[dict] = mapped_column(JSON)
+    percentage: Mapped[float] = mapped_column(Float)
+    revision: Mapped[int] = mapped_column()
+    update_id: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[int] = mapped_column()

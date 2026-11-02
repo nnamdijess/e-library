@@ -63,3 +63,32 @@ def test_encoded_paths_html_and_nested_navigation(tmp_path):
         nav = ET.fromstring(archive.read("book/nav.xhtml"))
         assert nav.find(f".//{{{XHTML}}}li/{{{XHTML}}}ol/{{{XHTML}}}li/{{{XHTML}}}a").text == "Child"
         assert b"#a%3Ab" in archive.read("book/nav.xhtml")
+
+
+def test_legacy_doctype_is_permitted_without_external_resolution(tmp_path):
+    from app.documents import read_xml
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("toc.ncx", b'<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "https://invalid.example/ncx.dtd"><ncx/>')
+    with ZipFile(buffer) as archive:
+        assert read_xml(archive, "toc.ncx").tag == "ncx"
+
+
+def test_text_pdf_remains_importable(tmp_path):
+    from app.documents import inspect_document
+    from book_fixtures import text_pdf_bytes
+    import pypdfium2 as pdfium
+    source = tmp_path / "text.pdf"
+    source.write_bytes(text_pdf_bytes())
+    metadata = inspect_document(source, tmp_path, "Text fixture")
+    assert metadata["format"] == "pdf" and metadata["page_count"] == 1 and metadata["has_cover"]
+    with pdfium.PdfDocument(source) as document:
+        page = document[0]
+        try:
+            text = page.get_textpage()
+            try:
+                assert "Original text PDF fixture" in text.get_text_range()
+            finally:
+                text.close()
+        finally:
+            page.close()

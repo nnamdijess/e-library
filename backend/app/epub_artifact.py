@@ -1,4 +1,4 @@
-"""Version 1 reading copy: semantic XHTML, local JPEGs, and controlled typography.
+"""Version 2 reading copy: passive XHTML/SVG and filtered publisher typography.
 
 Never change this output algorithm in place once CFIs are persisted: a changed
 document tree needs a new artifact version and explicit anchor handling.
@@ -142,6 +142,10 @@ def sanitized_chapter(data: bytes, source_name: str, output_name: str, pages: di
     )
     fragment = html5lib.parseFragment(cleaned)
     body = ET.Element(f"{{{XHTML}}}body")
+    for attribute in ("class", "lang", "dir", "style"):
+        value = source_body.get(attribute)
+        if value:
+            body.set(attribute, safe_declarations(value) if attribute == "style" else value[:2000])
     body.text = fragment.text
     body.extend(list(fragment))
     return xhtml_document(title, body, css="\n".join(css), language=language)
@@ -326,7 +330,10 @@ def build_reading_copy(source: Path, output: Path, expected_hash: str) -> list[s
             if path not in spine_paths:
                 ET.SubElement(out_spine, "itemref", {"idref": page_ids[path], "linear": "no"})
         write("book/package.opf", ET.tostring(opf, encoding="utf-8", xml_declaration=True))
-    return notices
+    bounded = [clean_text(notice, 600) for notice in notices[:8]]
+    if len(notices) > 8:
+        bounded.append(f"{len(notices) - 8} additional resource notices are marked in the reading order. See server logs for diagnostics.")
+    return bounded
 
 
 def prepare_reading_copy(source: str, directory: str, expected_hash: str) -> None:
@@ -337,5 +344,7 @@ def prepare_reading_copy(source: str, directory: str, expected_hash: str) -> Non
     except InvalidDocument as error:
         result = {"ok": False, "message": str(error), "code": error.code}
     except Exception:
+        import logging
+        logging.getLogger(__name__).exception("EPUB reading-copy preparation failed")
         result = {"ok": False, "message": "The EPUB reading copy could not be prepared safely.", "code": "reader_preparation_failed"}
     (output / "result.json").write_text(json.dumps(result), encoding="utf-8")

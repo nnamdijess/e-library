@@ -109,8 +109,12 @@ def test_reader_routes_authenticated_cached_and_versioned(settings):
         async with client_for(settings, cookies=cookies) as restarted:
             assert (await restarted.get(info["content_url"])).content == reading.content
             assert artifact.stat().st_mtime_ns == timestamp
-            pdf = (await upload(restarted, pdf_bytes(), name="book.pdf")).json()["book"]
+            original_pdf = pdf_bytes()
+            pdf = (await upload(restarted, original_pdf, name="book.pdf")).json()["book"]
             assert (await restarted.get(f"/api/v1/books/{pdf['id']}/epub")).status_code == 409
+            pdf_content = await restarted.get(f"/api/v1/books/{pdf['id']}/pdf/content")
+            assert pdf_content.status_code == 200 and pdf_content.content == original_pdf
+            assert (await restarted.get(f"/api/v1/books/{uploaded['id']}/pdf/content")).status_code == 409
         assert list((settings.data_dir / "staging").iterdir()) == []
     asyncio.run(scenario())
 

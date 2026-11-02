@@ -16,6 +16,7 @@ from app.main import create_app
 from app.security import provision_owner
 from app.storage import ingest_book
 from test_epub_reader import reading_fixture
+from book_fixtures import pdf_bytes
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
             with Session(engine) as db:
                 provision_owner(db, "testowner", "local-reader-test-only")
             ingest_book(BytesIO(reading_fixture(hostile=True)), "reader-fixture.epub", 1, settings, engine)
+            ingest_book(BytesIO(pdf_bytes()), "fixture.pdf", 1, settings, engine)
             uvicorn.run(create_app(settings), host="127.0.0.1", port=8001, access_log=False)
         finally:
             engine.dispose()

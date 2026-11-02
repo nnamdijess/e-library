@@ -19,6 +19,7 @@ from app.security import csrf_token, dummy_hash, password_hasher, token_hash, ve
 from app.storage import StorageFailure, ingest_book, storage_path
 from app.epub_artifact import ARTIFACT_VERSION
 from app.reader_service import cached_copy, ensure_reading_copy
+from app.progress import ProgressUpdate, get_progress, save_progress, snapshot
 
 router = APIRouter(prefix="/api/v1")
 COOKIE = "ebook_session"
@@ -260,6 +261,35 @@ def book_cover(book_id: str, request: Request, db: Database, user: Owner):
     if not path.is_file():
         fail(404, "cover_not_found", "Cover not found.")
     return FileResponse(path, media_type="image/jpeg", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+@router.get("/books/{book_id}/progress")
+def read_progress(book_id: str, db: Database, user: Owner):
+    book(book_id, db, user)  # Same owner-scoped lookup as metadata.
+    return snapshot(get_progress(db, user.id, book_id))
+
+
+@router.get("/books/{book_id}/pdf/content")
+def pdf_content(book_id: str, request: Request, db: Database, user: Owner):
+    item = book(book_id, db, user)
+    if item.format != "pdf":
+        fail(409, "reader_format", "This endpoint serves PDF books only.")
+    path = storage_path(request.app.state.settings, item.storage_key)
+    if not path.is_file():
+        fail(404, "book_file_missing", "The stored PDF is missing. Restore the original from backup.")
+    return FileResponse(path, media_type="application/pdf", filename="book.pdf", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+@router.put("/books/{book_id}/progress")
+def write_progress(book_id: str, body: ProgressUpdate, db: Database, user: Owner, _csrf: CsrfSession):
+    item = book(book_id, db, user)
+    try:
+        accepted, current = save_progress(db, item, user.id, body)
+    except InvalidDocument as error:
+        fail(422, error.code, str(error))
+    if not accepted:
+        raise HTTPException(409, detail={"code": "progress_conflict", "message": "Another reading session saved a newer position. Choose which position to keep.", "current": current})
+    return current
 
 
 async def authorized_reading_copy(book_id: str, request: Request, db: Session, user: User):

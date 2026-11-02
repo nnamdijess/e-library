@@ -40,6 +40,23 @@ def pdf_bytes(*, title="A PDF fixture", author="PDF Test Author"):
     return buffer.getvalue()
 
 
+def text_pdf_bytes():
+    """A tiny selectable-text PDF with a standard font; no PDF writer dependency."""
+    stream = b"BT /F1 24 Tf 30 180 Td (Original text PDF fixture) Tj ET"
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>", b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 240] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"]
+    result = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, value in enumerate(objects, 1):
+        offsets.append(len(result))
+        result.extend(str(index).encode() + b" 0 obj\n" + value + b"\nendobj\n")
+    xref = len(result)
+    result.extend(b"xref\n0 6\n0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        result.extend(f"{offset:010d} 00000 n \n".encode())
+    result.extend(f"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(result)
+
+
 def duplicate_cover_epub(*, structural_reference=False, second_type="image/jpeg"):
     """Original regression fixture for EPUB 2 exports with reused cover IDs."""
     with ZipFile(BytesIO(epub_bytes())) as archive:

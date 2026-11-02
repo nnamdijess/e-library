@@ -113,7 +113,9 @@ def referenced_member(base: str, href: str) -> str:
 def read_xml(archive: ZipFile, name: str):
     if archive.getinfo(name).file_size > MAX_XML_BYTES:
         raise InvalidDocument("An EPUB XML document exceeds the processing limit.")
-    return XML.fromstring(archive.read(name), forbid_dtd=True)
+    # EPUB 2 publications may declare a legacy public DOCTYPE. Permit the
+    # declaration while forbidding entity definitions and external resolution.
+    return XML.fromstring(archive.read(name), forbid_dtd=False, forbid_entities=True, forbid_external=True)
 
 
 def inspect_epub(source: Path, output: Path, fallback: str) -> dict:
