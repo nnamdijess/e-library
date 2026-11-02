@@ -39,6 +39,7 @@ class Inspection(BaseModel):
     language: str | None
     page_count: int | None
     has_cover: bool
+    warnings: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -185,7 +186,7 @@ def ingest_book(stream: BinaryIO, filename: str, owner_id: int, settings: Settin
             if existing is None:
                 raise
             return IngestedBook(existing, True, [])
-        warnings = [] if metadata.has_cover else ["No usable cover was available; a placeholder is shown."]
+        warnings = metadata.warnings + ([] if metadata.has_cover else ["No usable cover was available; a placeholder is shown."])
         return IngestedBook(book, False, warnings)
     except (OSError, SQLAlchemyError) as error:
         logger.error("Book storage failed (%s)", type(error).__name__)

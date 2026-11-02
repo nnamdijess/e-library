@@ -17,7 +17,7 @@ from app.database import make_engine, migrate
 from app.documents import InvalidDocument, inspect_document
 from app.models import Book
 from app.storage import StorageFailure, audit_storage, ingest_book, inspect_in_process, storage_path
-from book_fixtures import epub_bytes, pdf_bytes
+from book_fixtures import duplicate_cover_epub, epub_bytes, pdf_bytes
 from conftest import ORIGIN
 from test_auth_catalog import client_for, login
 
@@ -303,3 +303,45 @@ def test_storage_audit_reports_leftovers_without_deletion(settings):
                 storage_path(settings, key)
     finally:
         engine.dispose()
+
+
+def test_duplicate_nonstructural_cover_ids_upload_with_warning(settings):
+    content = duplicate_cover_epub()
+
+    async def scenario():
+        async with client_for(settings) as client:
+            await login(client)
+            response = await upload(client, content)
+            assert response.status_code == 201, response.text
+            result = response.json()
+            assert result["book"]["has_cover"] is True
+            assert len(result["warnings"]) == 1 and "duplicate cover identifiers" in result["warnings"][0]
+            engine = make_engine(settings)
+            try:
+                with Session(engine) as db:
+                    book = db.get(Book, result["book"]["id"])
+                    assert storage_path(settings, book.storage_key).read_bytes() == content
+            finally:
+                engine.dispose()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("options", [{"structural_reference": True}, {"second_type": "application/xhtml+xml"}])
+def test_duplicate_cover_ids_reject_ambiguous_structural_resources(tmp_path, options):
+    source = tmp_path / "book.epub"
+    source.write_bytes(duplicate_cover_epub(**options))
+    with pytest.raises(InvalidDocument, match="duplicate identifier"):
+        inspect_document(source, tmp_path, "Fallback")
+
+
+@pytest.mark.parametrize("replacement, message", [
+    (b'<item href="chapter.xhtml"', "missing its identifier"),
+    (b'<item id="cover" href="chapter.xhtml"', "duplicate identifier"),
+])
+def test_missing_and_duplicate_chapter_ids_remain_rejected(tmp_path, replacement, message):
+    with ZipFile(BytesIO(epub_bytes())) as archive:
+        package = archive.read("OEBPS/package.opf").replace(b'<item id="chapter" href="chapter.xhtml"', replacement)
+    source = tmp_path / "book.epub"
+    source.write_bytes(epub_bytes(changes={"OEBPS/package.opf": package}))
+    with pytest.raises(InvalidDocument, match=message):
+        inspect_document(source, tmp_path, "Fallback")

@@ -171,14 +171,36 @@ def inspect_epub(source: Path, output: Path, fallback: str) -> dict:
         spine = package.find(OPF + "spine")
         if metadata is None or manifest is None or spine is None or not len(spine):
             raise InvalidDocument("The EPUB is missing metadata, a manifest, or reading order.")
+        manifest_items = manifest.findall(OPF + "item")
+        cover_id = next((item.get("content") for item in metadata.findall(OPF + "meta") if item.get("name") == "cover"), None)
+        cover_ids = {item.get("id") for item in manifest_items if "cover-image" in item.get("properties", "").split()}
+        if cover_id:
+            cover_ids.add(cover_id)
+        structural_ids = {item.get("idref") for item in spine.findall(OPF + "itemref")}
+        structural_ids.add(spine.get("toc"))
+        for item in manifest_items:
+            structural_ids.update((item.get("fallback"), item.get("media-overlay")))
+        raster_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+        duplicate_covers = set()
         items = {}
-        for item in manifest.findall(OPF + "item"):
+        for item in manifest_items:
             identifier = item.get("id")
-            if not identifier or identifier in items:
-                raise InvalidDocument("The EPUB manifest contains missing or duplicate identifiers.")
+            if not identifier:
+                raise InvalidDocument("An EPUB manifest item is missing its identifier.")
             member_name = referenced_member(package_name, item.get("href", ""))
             if member_name not in archive.namelist():
                 raise InvalidDocument("The EPUB references a missing resource.")
+            if identifier in items:
+                previous = items[identifier][1]
+                # Some EPUB 2 exports reuse a cover ID for multiple images. This
+                # does not affect reading order if no structural IDREF uses it.
+                # Keep the first thumbnail candidate without rewriting the book.
+                if (identifier in cover_ids and identifier not in structural_ids
+                        and previous.get("media-type") in raster_types
+                        and item.get("media-type") in raster_types):
+                    duplicate_covers.add(identifier)
+                    continue
+                raise InvalidDocument("The EPUB manifest has a duplicate identifier that makes resource references ambiguous.")
             items[identifier] = (member_name, item)
         for itemref in spine.findall(OPF + "itemref"):
             if itemref.get("idref") not in items:
@@ -200,8 +222,7 @@ def inspect_epub(source: Path, output: Path, fallback: str) -> dict:
         def values(tag: str) -> list[str]:
             return [text for element in metadata.findall(DC + tag) if (text := clean_text(" ".join(element.itertext())))]
 
-        cover_id = next((item.get("content") for item in metadata.findall(OPF + "meta") if item.get("name") == "cover"), None)
-        cover = next((pair for pair in items.values() if "cover-image" in pair[1].get("properties", "").split()), items.get(cover_id))
+        cover = next((items[item.get("id")] for item in manifest_items if "cover-image" in item.get("properties", "").split()), items.get(cover_id))
         has_cover = False
         if cover is not None and archive.getinfo(cover[0]).file_size <= MAX_COVER_BYTES:
             has_cover = raster_cover(archive.read(cover[0]), output / "cover.jpg")
@@ -211,6 +232,7 @@ def inspect_epub(source: Path, output: Path, fallback: str) -> dict:
             publisher=next(iter(values("publisher")), None), description=description_text(raw_description),
             language=next(iter(values("language")), "")[:64] or None,
             page_count=None, has_cover=has_cover,
+            warnings=["The EPUB has duplicate cover identifiers; the first listed cover is used for the thumbnail."] if duplicate_covers else [],
         )
 
 

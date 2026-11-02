@@ -220,6 +220,10 @@ file limit. Only one file is accepted; extra multipart fields/files are rejected
 
 EPUB inspection checks ZIP paths, duplicate names, special files, encryption,
 CRC integrity, container/package XML, manifest resources, and reading order.
+Missing manifest IDs and ambiguous duplicate IDs are rejected. Duplicate IDs
+used only for raster cover images are tolerated with an upload warning when no
+spine, TOC, fallback, or media-overlay reference uses that ID. The first listed
+cover supplies the thumbnail; the original EPUB is not rewritten.
 XML DTDs/entities and external manifest resources are rejected. Archive limits
 are 5,000 entries, 64 MiB per member, 512 MiB expanded total, a 1,000:1 expansion
 ratio, and 2 MiB per parsed XML file. Known font obfuscation is distinguished

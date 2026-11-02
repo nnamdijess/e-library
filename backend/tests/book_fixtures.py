@@ -38,3 +38,18 @@ def pdf_bytes(*, title="A PDF fixture", author="PDF Test Author"):
     second = Image.new("RGB", (160, 240), "#d8e1d2")
     first.save(buffer, "PDF", save_all=True, append_images=[second], title=title, author=author, subject="An image-only fixture; OCR is not required.")
     return buffer.getvalue()
+
+
+def duplicate_cover_epub(*, structural_reference=False, second_type="image/jpeg"):
+    """Original regression fixture for EPUB 2 exports with reused cover IDs."""
+    with ZipFile(BytesIO(epub_bytes())) as archive:
+        package = archive.read("OEBPS/package.opf")
+        cover = archive.read("OEBPS/cover.png")
+    package = package.replace(b'version="3.0"', b'version="2.0"')
+    package = package.replace(b"</metadata>", b'<meta name="cover" content="cover"/></metadata>')
+    package = package.replace(b'properties="cover-image"', b'')
+    duplicate = f'<item id="cover" href="second-cover.jpg" media-type="{second_type}"/>'.encode()
+    package = package.replace(b"</manifest>", duplicate + b"</manifest>")
+    if structural_reference:
+        package = package.replace(b"</spine>", b'<itemref idref="cover"/></spine>')
+    return epub_bytes(changes={"OEBPS/package.opf": package}, extras={"OEBPS/second-cover.jpg": cover})

@@ -67,3 +67,17 @@ upload form, grid, responsive layout, and client hydration have not been visuall
 verified. Follow the README's manual upload/reload/restart sequence on Windows.
 Android, iPadOS 12.5.8, and Linux/server execution remain unverified. The iPad
 compatibility decision is still required before reader implementation.
+
+## Compatibility follow-up: duplicate EPUB cover IDs
+
+A real EPUB 2 upload reused `cover` for two JPEG manifest entries, without using
+that ID in reading-order or other structural references. The original validator
+rejected the entire book. It now accepts this narrowly defined cover-only case
+with a visible upload warning and uses the first listed image for the thumbnail.
+Missing IDs, duplicate chapter IDs, and structural ambiguity remain errors.
+
+The owner's explicitly supplied local file passed inspection and cover extraction
+after this change; its SHA-256 was unchanged. It was not automatically added to
+the real catalog. No private book content, source path, or cover was added to Git.
+The synthetic regression fixtures use locally generated content. **54 backend
+tests passed** after this compatibility correction.
