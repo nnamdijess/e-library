@@ -60,7 +60,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
       setBook(info);
       if (info.format !== "epub") throw new Error("PDF reading will be available in the next milestone.");
       const copy = await api<ReadingCopy>(`/books/${encodeURIComponent(bookId)}/epub`, { signal: controller.signal });
-      if (copy.artifact_version !== 1 || copy.content_url !== `/api/v1/books/${encodeURIComponent(bookId)}/epub/1/content`) {
+      if (copy.artifact_version !== 2 || copy.content_url !== `/api/v1/books/${encodeURIComponent(bookId)}/epub/2/content`) {
         throw new Error("This reading copy requires a newer reader.");
       }
       const response = await fetch(copy.content_url, { credentials: "same-origin", cache: "no-store", signal: controller.signal });

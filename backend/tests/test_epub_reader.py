@@ -82,14 +82,14 @@ def test_reader_routes_authenticated_cached_and_versioned(settings):
     async def scenario():
         async with client_for(settings) as client:
             assert (await client.get("/api/v1/books/missing/epub")).status_code == 401
-            assert (await client.get("/api/v1/books/missing/epub/1/content")).status_code == 401
+            assert (await client.get("/api/v1/books/missing/epub/2/content")).status_code == 401
             await login(client)
             uploaded = (await upload(client, reading_fixture(), name="reader.epub")).json()["book"]
             prefix = f"/api/v1/books/{uploaded['id']}/epub"
             response = await client.get(prefix)
             assert response.status_code == 200, response.text
             info = response.json()
-            assert info["artifact_version"] == 1
+            assert info["artifact_version"] == 2
             reading = await client.get(info["content_url"])
             assert reading.status_code == 200 and reading.headers["cache-control"] == "no-store"
             with ZipFile(BytesIO(reading.content)) as archive:
@@ -102,7 +102,7 @@ def test_reader_routes_authenticated_cached_and_versioned(settings):
                 with Session(engine) as db:
                     book = db.get(Book, uploaded["id"])
                     original = storage_path(settings, book.storage_key)
-                    artifact = original.parent / "reader-v1.epub"
+                    artifact = original.parent / "reader-v2.epub"
                     timestamp = artifact.stat().st_mtime_ns
             finally:
                 engine.dispose()
