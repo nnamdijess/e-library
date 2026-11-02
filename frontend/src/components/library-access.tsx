@@ -146,7 +146,7 @@ export function LibraryAccess() {
             <span>{catalog.offset + 1}–{Math.min(catalog.offset + catalog.limit, catalog.total)} of {catalog.total}</span>
             <button disabled={refreshing || uploading || catalog.offset + catalog.limit >= catalog.total} onClick={() => navigate(catalog.offset + catalog.limit)}>Next</button>
           </nav>}
-          <p className="footnote">EPUB books are ready to read. PDF reading and saved progress are coming next.</p>
+          <p className="footnote">EPUB and PDF books are ready to read, with saved positions and synchronization status.</p>
         </>
       )}
     </section>

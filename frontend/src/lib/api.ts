@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public detail?: unknown) {
     super(message);
   }
 }
@@ -17,7 +17,7 @@ export async function api<T>(path: string, options: RequestInit = {}, timeoutMs 
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       const message = body?.detail?.message ?? (typeof body?.detail === "string" ? body.detail : null);
-      throw new ApiError(response.status, message ?? (response.status === 413 ? "The file exceeds the upload limit." : "The API is unavailable. Try again."));
+      throw new ApiError(response.status, message ?? (response.status === 413 ? "The file exceeds the upload limit." : "The API is unavailable. Try again."), body?.detail);
     }
     return response.status === 204 ? undefined as T : await response.json();
   } finally {

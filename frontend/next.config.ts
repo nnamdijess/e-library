@@ -17,6 +17,8 @@ if (
 }
 
 const config: NextConfig = {
+  // The floating dev badge overlaps reader navigation on narrow viewports.
+  devIndicators: false,
   poweredByHeader: false,
   experimental: {
     // External rewrites clone request bodies. Keep their buffer above the file

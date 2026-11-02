@@ -28,11 +28,13 @@ export class EpubAdapter implements ReaderController {
 
   constructor(private host: HTMLElement, private artifactVersion: number, private callbacks: Callbacks) {}
 
-  async open(data: ArrayBuffer): Promise<void> {
+  async open(data: ArrayBuffer, initialLocation?: string): Promise<void> {
     try {
       await this.book.open(data, "binary");
       await this.book.ready;
       this.opened = true;
+      if (this.disposed) return;
+      await this.book.locations.generate(1600);
       if (this.disposed) return;
       const navigation = await this.book.loaded.navigation;
       if (this.disposed) return;
@@ -53,6 +55,7 @@ export class EpubAdapter implements ReaderController {
           atStart: location.atStart, atEnd: location.atEnd,
           section: location.start.index + 1,
           page: location.start.displayed.page, pages: location.start.displayed.total,
+          percentage: location.atEnd ? 1 : Math.max(0, Math.min(1, this.book.locations.percentageFromCfi(location.start.cfi) || 0)),
         });
         // EPUB.js can only restore a view after resizing once its first CFI
         // has been reported. A resize before then clears the view permanently.
@@ -73,7 +76,7 @@ export class EpubAdapter implements ReaderController {
         const { width, height } = this.host.getBoundingClientRect();
         if (!this.disposed && width > 0 && height > 0) this.rendition?.resize(Math.floor(width), Math.floor(height));
       });
-      await this.rendition.display();
+      await this.move(() => this.rendition!.display(initialLocation));
     } finally {
       if (this.disposed && this.opened) this.release();
     }
@@ -110,9 +113,24 @@ export class EpubAdapter implements ReaderController {
     this.linkCleanups.set(index, () => contents.document.removeEventListener("click", click, true));
   }
 
-  async next() { if (!this.disposed) await this.rendition?.next(); }
-  async previous() { if (!this.disposed) await this.rendition?.prev(); }
-  async display(location: string) { if (!this.disposed) await this.rendition?.display(location); }
+  private async move(operation: () => Promise<unknown>) {
+    if (this.disposed || !this.rendition) return;
+    const rendition = this.rendition;
+    let finish: () => void = () => {};
+    let fail: (error: Error) => void = () => {};
+    const located = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
+    const timer = setTimeout(() => fail(new Error("The reading location could not be resolved.")), 15000);
+    rendition.on("relocated", finish);
+    try {
+      // display/next resolve before the RAF that updates rendition.location.
+      // Wait for that location before UI changes can trigger another resize.
+      await Promise.all([operation(), located]);
+    } finally { clearTimeout(timer); rendition.off("relocated", finish); }
+  }
+
+  async next() { await this.move(() => this.rendition!.next()); }
+  async previous() { await this.move(() => this.rendition!.prev()); }
+  async display(location: string) { await this.move(() => this.rendition!.display(location)); }
 
   private release() {
     if (this.destroyed) return;

@@ -1,5 +1,8 @@
 # Milestone 4: EPUB reading
 
+Historical checkpoint. The later compatibility/progress stage supersedes the
+limitations below; see [current progress design](reading-progress.md).
+
 Implemented: open an EPUB from the library, paginated reading, previous/next
 controls, contents navigation, internal chapter/fragment links, resizing, keyboard
 arrows, and returning to the library. The reading engine reports versioned EPUB

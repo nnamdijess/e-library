@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { Chapter, EpubLocation, PageState, ReaderController } from "@/readers/types";
+import { ProgressSession, type SyncState } from "@/readers/progress";
 
 type BookInfo = { title: string; format: "epub" | "pdf"; authors: string[] };
 type ReadingCopy = { artifact_version: number; content_url: string; warnings: string[] };
@@ -13,6 +14,8 @@ export function EpubReader({ bookId }: { bookId: string }) {
   const engine = useRef<ReaderController | null>(null);
   const pending = useRef(false);
   const latestLocation = useRef<EpubLocation | null>(null);
+  const progress = useRef<ProgressSession | null>(null);
+  const [sync, setSync] = useState<SyncState>({ message: "Loading saved position…", conflict: false });
   const [book, setBook] = useState<BookInfo | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [page, setPage] = useState<PageState | null>(null);
@@ -43,6 +46,11 @@ export function EpubReader({ bookId }: { bookId: string }) {
   useEffect(() => {
     let active = true;
     let owned: ReaderController | null = null;
+    const session = new ProgressSession(bookId, (state) => { if (active) setSync(state); }, async (location) => {
+      if (location.format !== "epub" || location.artifact_version !== 2) throw new Error("Incompatible location");
+      await owned?.display(location.cfi);
+    });
+    progress.current = session;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
     pending.current = false;
@@ -63,6 +71,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
       if (copy.artifact_version !== 2 || copy.content_url !== `/api/v1/books/${encodeURIComponent(bookId)}/epub/2/content`) {
         throw new Error("This reading copy requires a newer reader.");
       }
+      const saved = await session.start("epub", copy.artifact_version);
       const response = await fetch(copy.content_url, { credentials: "same-origin", cache: "no-store", signal: controller.signal });
       if (!response.ok) throw new Error("The reading copy could not be downloaded. Return to the library and sign in again if needed.");
       const data = await response.arrayBuffer();
@@ -74,14 +83,15 @@ export function EpubReader({ bookId }: { bookId: string }) {
           if (!active) return;
           latestLocation.current = location;
           setPage(state);
+          session.record(location, state.percentage);
         },
         onKeyboard: (direction) => { if (active) void navigate(direction); },
         onLink: (href) => { if (active) void navigate({ href }); },
         onError: () => { if (active) setError("This chapter could not be displayed. Try another chapter."); },
       });
       engine.current = owned;
-      await owned.open(data);
-      if (active) { setReady(true); setNotices(copy.warnings); }
+      await owned.open(data, saved?.format === "epub" ? saved.cfi : undefined);
+      if (active) { setReady(true); setNotices(copy.warnings); session.enable(); }
     }
     void open().catch((reason) => {
       if (active) setError(reason instanceof ApiError && reason.status === 401 ? "Sign in from the library to open this book." : reason instanceof Error && reason.name !== "AbortError" ? reason.message : "Opening the book took too long. Please try again.");
@@ -103,6 +113,8 @@ export function EpubReader({ bookId }: { bookId: string }) {
       clearTimeout(timeout);
       window.removeEventListener("keydown", keydown);
       owned?.destroy();
+      session.destroy();
+      if (progress.current === session) progress.current = null;
       if (engine.current === owned) engine.current = null;
     };
   }, [bookId, attempt]);
@@ -116,7 +128,8 @@ export function EpubReader({ bookId }: { bookId: string }) {
       <button className="secondary" disabled={!ready || !chapters.length} aria-expanded={tocOpen} aria-controls="reader-toc" onClick={() => setTocOpen((value) => !value)}>Contents</button>
     </header>
     <div className="reader-messages">
-      <p className="reader-save-note">Reading progress is not saved yet.</p>
+      <p className="reader-save-note" role="status">{sync.message}</p>
+      {sync.conflict && <div className="reader-conflict"><button className="secondary" onClick={() => void progress.current?.resolve(true)}>Load saved position</button><button className="secondary" onClick={() => void progress.current?.resolve(false, latestLocation.current ?? undefined, page?.percentage)}>Keep this position</button></div>}
       {notices.length > 0 && <details><summary>Book notices</summary><ul>{notices.map((notice, index) => <li key={index}>{notice}</li>)}</ul></details>}
       {error && <div role="alert" className="reader-error"><span>{error}</span><button className="secondary" onClick={() => setAttempt((value) => value + 1)}>Reopen book</button></div>}
     </div>
@@ -130,7 +143,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
     </div>
     <footer className="reader-footer">
       <button disabled={!ready || moving || page?.atStart} onClick={() => void navigate("previous")}>Previous</button>
-      <p role="status">{page ? `${currentChapter?.label ?? `Section ${page.section}`} · ${page.page} / ${page.pages}` : ""}</p>
+      <p role="status">{page ? `${currentChapter?.label ?? `Section ${page.section}`} · ${page.page} / ${page.pages} · ${Math.round(page.percentage * 100)}%` : ""}</p>
       <button disabled={!ready || moving || page?.atEnd} onClick={() => void navigate("next")}>Next</button>
     </footer>
   </main>;

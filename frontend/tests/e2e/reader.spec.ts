@@ -13,6 +13,8 @@ test("read, paginate, navigate chapters, resize, and return to the library", asy
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("link", { name: /Read book\s*:\s*Reader fixture/ }).click();
   await expect(page.getByRole("button", { name: "Contents", exact: true })).toBeEnabled({ timeout: 45000 });
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
+  await page.getByRole("complementary").getByRole("button", { name: "First chapter", exact: true }).click();
   const readingUrl = page.url();
   const frame = page.frameLocator(".epub-host iframe").first();
   await expect(frame.getByRole("heading", { name: "First chapter", exact: true })).toBeVisible();

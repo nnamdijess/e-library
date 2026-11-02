@@ -1,7 +1,8 @@
 # Incremental development plan
 
-Milestones 1–4 are approved and implemented. Each later milestone needs review
-before work starts. PDF reading and durable progress remain future scope.
+The foundation, library, EPUB compatibility, basic PDF reading, and durable
+progress stages are approved and implemented. Each further major stage needs
+review before work starts.
 
 The owner has prioritized a working, usable app on Windows, Android, and modern
 iPhone Safari. iPhone support is a primary requirement and has not been deferred.
@@ -33,9 +34,9 @@ filesystem directory stores immutable originals and generated JPEG covers.
 Milestone 3 adds staged ingestion, cover delivery, and a unified catalog grid.
 EPUB and PDF get separate engines with a shared progress API.
 
-Progress will use EPUB CFI or a PDF page and normalized position. Server revisions
-will reject stale writes, independent of client clocks. Full offline queuing and
-cross-device conflict resolution come later.
+Progress uses EPUB CFI or a PDF page and normalized position. Server revisions
+reject stale writes, independent of client clocks. A local retry journal and
+explicit cross-device conflict choices are implemented; offline book caching is future work.
 
 ## iPadOS 12.5.8 requirement
 
@@ -73,8 +74,10 @@ CFI location events behind a reader adapter. Safe content delivery and script/
 external-resource restrictions are implemented in a versioned reading copy.
 Automated browser tests pass in desktop Chromium, an Android-style touch layout,
 and an iPhone-style WebKit layout. Actual Android/iPhone device tests remain
-separate acceptance checks. Durable progress belongs to Milestone 6; PDF rendering
-belongs to Milestone 5. The next major implementation still needs the owner's approval.
+separate acceptance checks. The owner subsequently authorized EPUB compatibility,
+progress persistence and basic PDF reading. See `epub-compatibility.md` and
+`reading-progress.md`. Advanced reader preferences, annotations and library
+organization still require a small reviewed stage.
 
 Sources checked during Milestone 1:
 

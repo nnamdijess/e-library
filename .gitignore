@@ -19,6 +19,7 @@ pytest-cache-files-*/
 *.log
 test-results/
 playwright-report/
+frontend/public/pdfjs/
 
 # Editor and OS files
 .DS_Store

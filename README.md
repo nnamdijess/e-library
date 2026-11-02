@@ -2,17 +2,16 @@
 
 A personal, self-hosted EPUB and PDF library, developed incrementally.
 
-**Completed scope: Milestones 1–4.** The application has owner login,
+**Completed scope: library, EPUB/PDF reading, and durable progress.** The application has owner login,
 revocable cookie sessions, SQLite metadata, validated EPUB/PDF uploads, private
 file storage, metadata extraction, covers/placeholders, and a unified library
 grid, plus an EPUB reader with pagination, chapter/contents navigation, internal
-links, and return-to-library navigation. PDF reading and saved reading progress
-are not implemented. Keep development on
+links, PDF.js page rendering, and confirmed server-side progress with CFI/page restoration. Keep development on
 loopback; deployment and remote device access belong to later milestones.
 
 ## Prerequisites
 
-- Node.js 22 or 24 LTS with npm (tested with Node 24.13.0).
+- Node.js 22.13+ or 24 LTS with npm (tested with Node 24.13.0).
 - Python 3.12 or 3.13 (tested with Python 3.13.15).
 - Git.
 
@@ -20,8 +19,9 @@ No Docker, WSL, external database, or cloud service is required for development.
 The commands below start from the repository root unless stated otherwise.
 
 When updating an existing checkout, install the updated Python requirements and
-run `npm.cmd ci` in `frontend/`. No new database migration is needed for the EPUB
-reader; existing uploaded books get their reading copy when first opened.
+run `npm.cmd ci` in `frontend/`. Stop the backend, back up `data/`, and run
+`python -m app.cli migrate` from `backend/` to add revisioned reading progress.
+Existing books get version 2 reading copies lazily; originals remain unchanged.
 
 ## Windows setup (PowerShell)
 
@@ -294,8 +294,8 @@ data/
     └── <generated-book-id>/
         ├── original.epub          # Or original.pdf, preserved byte-for-byte
         ├── cover.jpg              # Present only when generation succeeds
-        ├── reader-v1.epub         # Generated when an EPUB is first opened
-        └── reader-v1.json         # Version, source hash, and notices
+        ├── reader-v2.epub         # Generated when an EPUB is first opened
+        └── reader-v2.json         # Version, source hash, and notices
 ```
 
 Files are staged and flushed, inspected, then moved into their final directory
@@ -344,8 +344,10 @@ The grid is paginated once there are more than 20 books. Refresh library retriev
 the current page; successful uploads return to the first page. Uploads show a
 processing state rather than an estimated percentage. If a connection times out,
 refresh before retrying: the server may already have saved the book, and the hash
-check makes retrying identical bytes safe. EPUBs have a Read book link; PDF cards
-clearly indicate that their reader is still planned.
+check makes retrying identical bytes safe. Both formats have a Read book link;
+the matching reader opens automatically. Navigate, wait for **Synced**, and
+reopen/refresh to verify restoration. Repeat with a PDF page and scroll position.
+Cross-device conflicts offer **Load saved position** or **Keep this position**.
 
 The backend cookie is scoped to `/api`, so test authenticated API access through
 the frontend origin, not a different hostname. Tests passed on Windows; Android
@@ -363,17 +365,17 @@ Opening an EPUB first checks authentication and builds a versioned reading copy
 in a bounded subprocess. The original file's SHA-256 must match the catalog.
 The copy contains semantic XHTML, locally re-encoded JPEG images, generated
 navigation, and a controlled serif layout. Publisher scripts, event attributes,
-forms, frames, external links/resources, publisher CSS, and embedded fonts are
-omitted. GIFs become static images. SVG/MathML/interactive content is not supported
-in this first layout. Fixed-layout EPUBs are rejected with an explanatory error.
+forms, frames, external links/resources, and embedded fonts are omitted. Safe
+publisher CSS and static SVG are retained through explicit allowlists. GIFs become
+static images. MathML and interactive content remain unsupported. Fixed-layout EPUBs are rejected with an explanatory error.
 
 Existing EPUB 3 navigation or EPUB 2 NCX supplies the contents list when readable;
 otherwise chapter headings provide a fallback. Source chapter paths and internal
-fragment links are mapped to generated paths. Contents entries are currently
-flattened rather than displayed as a full nested hierarchy.
+fragment links are mapped to generated paths. Nested contents entries are preserved. Manifest fallback chains are followed;
+unsupported spine items have visible notice chapters rather than silently disappearing.
 
 `GET /api/v1/books/{id}/epub` prepares or retrieves metadata for the authorized
-reading copy. `GET /api/v1/books/{id}/epub/1/content` returns only that generated
+reading copy. `GET /api/v1/books/{id}/epub/2/content` returns only that generated
 EPUB. Invalid artifact versions and non-EPUB books do not fall back to originals.
 The interface checks the expected versioned URL before loading EPUB.js. Reading
 copies are private, have no-store responses, and are cached beside the original
@@ -396,11 +398,13 @@ Within an open reader, the engine reflows and repositions content on resize.
 Displayed page numbers belong to the current chapter and change with viewport
 size; they are not stable book-wide page numbers.
 
-**Reading progress is not saved yet.** Leaving/reopening a book starts again at
-the beginning. The UI says so; no backend progress persistence or cross-device
-resume is claimed. Those are Milestone 6.
+**Reading progress is saved after server confirmation.** EPUB CFI and PDF page/
+normalized offset persist in SQLite per owner/book. A debounced local journal
+retries unavailable-server saves. Revision conflicts require an explicit choice.
+See [progress design and verification](docs/reading-progress.md) for details.
+This is progress retry support, not offline book downloading or a PWA cache.
 
-Reading-copy version 1 must remain structurally stable once CFIs are persisted.
+Reading-copy version 2 must remain structurally stable once CFIs are persisted.
 Sanitizer/parser changes that alter the document tree require a new artifact
 version and an explicit location migration strategy. Preserve reading copies in
 backups, particularly after progress and annotations are added. The initial
@@ -411,8 +415,8 @@ generated-content limit is 64 MiB and the chapter limit is 2,000.
 The initial migration creates `users`, `sessions`, `login_throttle`, and `books`,
 plus Alembic's schema-version table. The database enforces one owner, foreign
 keys, valid book formats, nonnegative sizes, positive PDF page counts when
-present, and per-owner file-hash uniqueness. Reading progress is deferred to its
-approved milestone.
+present, and per-owner file-hash uniqueness. Migration 0002 adds `reading_progress`
+with locations, percentages, operation IDs, revisions, and server timestamps.
 
 SQLite currently uses its default rollback journal, five-second lock timeout,
 and short transactions. Password hashing runs outside database transactions.

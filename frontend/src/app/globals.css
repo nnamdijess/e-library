@@ -54,8 +54,8 @@ main.reader-page { max-width: none; padding: 0; margin: 0; height: 100vh; height
 .reader-heading { flex: 1; min-width: 0; }
 .reader-heading h1 { font: 600 1rem/1.4 system-ui, sans-serif; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-heading p { font-size: .8rem; margin: 2px 0 0; color: #555c52; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reader-messages { flex-shrink: 0; padding: 0 20px; font-size: .8rem; }
-.reader-save-note { margin: 6px 0; color: #666d60; }
+.reader-messages { position: relative; flex-shrink: 0; padding: 0 20px; font-size: .8rem; }
+.reader-save-note { margin: 6px 0; color: #666d60; min-height: 2.8em; max-height: 2.8em; overflow-y: auto; }
 .reader-content { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 .epub-host { width: 100%; height: 100%; }
 .reader-loading { position: absolute; inset: 20px 0 auto; text-align: center; z-index: 2; }
@@ -68,3 +68,7 @@ main.reader-page { max-width: none; padding: 0; margin: 0; height: 100vh; height
 .reader-error { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: #9b3728; padding: 8px 0; }
 .reader-error button { font-size: .8rem; }
 @media (max-width: 480px) { .reader-toolbar { gap: 10px; padding-inline: 12px; } .reader-heading p { display: none; } .reader-footer { padding-inline: 12px; } .reader-footer button { padding-inline: 12px; } .reader-footer p { font-size: .75rem; } }
+
+.reader-conflict { position: absolute; top: 100%; left: 12px; right: 12px; z-index: 8; display: flex; gap: .5rem; flex-wrap: wrap; padding: .8rem; background: #fffdf8; box-shadow: 0 2px 12px #0003; }
+.pdf-viewport { flex: 1; min-height: 0; overflow: auto; padding: 12px; background: #e7e5de; text-align: center; overscroll-behavior: contain; }
+.pdf-viewport canvas { display: block; margin: 0 auto; background: white; box-shadow: 0 2px 12px #0002; }
