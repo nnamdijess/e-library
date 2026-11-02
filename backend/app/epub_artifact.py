@@ -194,7 +194,7 @@ def build_reading_copy(source: Path, output: Path, expected_hash: str) -> list[s
         pages = {}
         for item in manifest:
             by_id.setdefault(item.get("id"), item)
-            if item.get("media-type") in {"application/xhtml+xml", "text/html"} and "nav" not in item.get("properties", "").split():
+            if item.get("media-type") in {"application/xhtml+xml", "text/html"}:
                 path = referenced_member(package_name, item.get("href", ""))
                 if path not in pages:
                     pages[path] = f"text/chapter-{len(pages):04d}.xhtml"

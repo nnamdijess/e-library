@@ -127,3 +127,21 @@ def test_reading_document_tree_is_reproducible(tmp_path):
     with ZipFile(first / "reader.epub") as one, ZipFile(second / "reader.epub") as two:
         assert one.read("book/text/chapter-0000.xhtml") == two.read("book/text/chapter-0000.xhtml")
         assert one.read("book/nav.xhtml") == two.read("book/nav.xhtml")
+
+
+def test_navigation_document_is_valid_reading_order_content(tmp_path):
+    content = reading_fixture()
+    with ZipFile(BytesIO(content)) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+    entries["OEBPS/package.opf"] = entries["OEBPS/package.opf"].replace(b"</spine>", b'<itemref idref="nav"/></spine>')
+    source = tmp_path / "original.epub"
+    with ZipFile(source, "w") as archive:
+        for name, data in entries.items():
+            archive.writestr(name, data)
+    before = source.read_bytes()
+    build_reading_copy(source, tmp_path, hashlib.sha256(before).hexdigest())
+    with ZipFile(tmp_path / "reader.epub") as archive:
+        package = ET.fromstring(archive.read("book/package.opf"))
+        assert len(package.find("{http://www.idpf.org/2007/opf}spine")) == 3
+        assert b"First chapter" in archive.read("book/text/chapter-0002.xhtml")
+    assert source.read_bytes() == before
