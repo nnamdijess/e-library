@@ -4,13 +4,19 @@ import secrets
 import time
 from typing import Annotated, Literal
 
+from anyio import WouldBlock
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 
+from app.documents import InvalidDocument
 from app.models import Book, LoginSession, LoginThrottle, User
 from app.security import csrf_token, dummy_hash, password_hasher, token_hash, verify_password
+from app.storage import StorageFailure, ingest_book, storage_path
 
 router = APIRouter(prefix="/api/v1")
 COOKIE = "ebook_session"
@@ -166,6 +172,7 @@ class BookResponse(BaseModel):
     byte_size: int
     page_count: int | None
     created_at: int
+    has_cover: bool
 
 
 class CatalogResponse(BaseModel):
@@ -173,6 +180,55 @@ class CatalogResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UploadResponse(BaseModel):
+    book: BookResponse
+    duplicate: bool
+    warnings: list[str]
+
+
+@router.get("/upload-policy")
+def upload_policy(request: Request, _user: Owner):
+    return {"max_bytes": request.app.state.settings.max_upload_bytes, "formats": ["epub", "pdf"]}
+
+
+@router.post("/books", response_model=UploadResponse, status_code=201, openapi_extra={
+    "requestBody": {"required": True, "content": {"multipart/form-data": {
+        "schema": {"type": "object", "required": ["file"], "properties": {
+            "file": {"type": "string", "format": "binary"},
+        }},
+    }}},
+})
+async def upload_book(request: Request, response: Response, user: Owner, _csrf: CsrfSession, db: Database):
+    owner_id = user.id
+    db.commit()  # No database lock while receiving or processing a document.
+    lock = request.app.state.upload_lock
+    try:
+        lock.acquire_nowait()
+    except WouldBlock:
+        raise HTTPException(503, detail={"code": "upload_busy", "message": "Another book is being processed. Try again shortly."}, headers={"Retry-After": "2"})
+    try:
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "multipart/form-data":
+            fail(415, "multipart_required", "Send one file using multipart/form-data.")
+        async with request.form(max_files=1, max_fields=0, max_part_size=1024) as form:
+            parts = form.multi_items()
+            if len(parts) != 1 or parts[0][0] != "file" or not isinstance(parts[0][1], UploadFile):
+                fail(400, "one_file_required", "Upload exactly one file in the file field.")
+            uploaded = parts[0][1]
+            result = await run_in_threadpool(
+                ingest_book, uploaded.file, uploaded.filename or "Untitled book", owner_id,
+                request.app.state.settings, request.app.state.engine,
+            )
+        response.status_code = 200 if result.duplicate else 201
+        return UploadResponse(book=BookResponse.model_validate(result.book), duplicate=result.duplicate, warnings=result.warnings)
+    except InvalidDocument as error:
+        status = 413 if error.code == "file_too_large" else 415 if error.code == "unsupported_format" else 422
+        fail(status, error.code, str(error))
+    except StorageFailure:
+        fail(500, "storage_failed", "The book could not be stored. Please try again.")
+    finally:
+        lock.release()
 
 
 @router.get("/books", response_model=CatalogResponse)
@@ -188,3 +244,17 @@ def book(book_id: str, db: Database, user: Owner):
     if item is None:
         fail(404, "book_not_found", "Book not found.")
     return item
+
+
+@router.get("/books/{book_id}/cover")
+def book_cover(book_id: str, request: Request, db: Database, user: Owner):
+    item = db.scalar(select(Book).where(Book.id == book_id, Book.owner_id == user.id))
+    if item is None or item.cover_key is None:
+        fail(404, "cover_not_found", "Cover not found.")
+    try:
+        path = storage_path(request.app.state.settings, item.cover_key)
+    except StorageFailure:
+        fail(404, "cover_not_found", "Cover not found.")
+    if not path.is_file():
+        fail(404, "cover_not_found", "Cover not found.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})

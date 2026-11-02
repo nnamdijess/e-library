@@ -21,6 +21,7 @@ class User(Base):
     created_at: Mapped[int] = mapped_column(default=lambda: int(time.time()))
 
 
+
 class LoginSession(Base):
     __tablename__ = "sessions"
 
@@ -67,3 +68,7 @@ class Book(Base):
     page_count: Mapped[int | None] = mapped_column()
     artifact_version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[int] = mapped_column(default=lambda: int(time.time()))
+
+    @property
+    def has_cover(self) -> bool:
+        return self.cover_key is not None

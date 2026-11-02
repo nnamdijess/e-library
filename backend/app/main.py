@@ -3,12 +3,14 @@
 from contextlib import asynccontextmanager
 from typing import Literal
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api import router
+from app.body_limits import BodyLimits
 from app.config import Settings
 from app.database import make_engine, require_current_schema
 
@@ -32,10 +34,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             engine.dispose()
 
-    application = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+    application = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
     application.state.settings = settings
     application.state.engine = engine
+    application.state.upload_lock = anyio.Semaphore(1)
     application.include_router(router)
+    application.add_middleware(BodyLimits, max_upload_bytes=settings.max_upload_bytes)
 
     @application.exception_handler(RequestValidationError)
     async def invalid_request(_request: Request, _error: RequestValidationError):

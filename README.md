@@ -2,11 +2,11 @@
 
 A personal, self-hosted EPUB and PDF library, developed incrementally.
 
-**Completed scope: Milestones 1 and 2.** The application has owner login,
-revocable cookie sessions, a persistent SQLite catalog, and explicit database
-migrations. The catalog starts empty. Uploads, readers, and reading progress are
-not implemented. Keep development on loopback; deployment and remote device
-access belong to later milestones.
+**Completed scope: Milestones 1–3.** The application has owner login,
+revocable cookie sessions, SQLite metadata, validated EPUB/PDF uploads, private
+file storage, metadata extraction, covers/placeholders, and a unified library
+grid. Readers and reading progress are not implemented. Keep development on
+loopback; deployment and remote device access belong to later milestones.
 
 ## Prerequisites
 
@@ -60,7 +60,8 @@ npm.cmd run dev
 ```
 
 Open <http://127.0.0.1:3000> and sign in with the owner credentials you chose.
-You should see an empty catalog and **API connected**. Reloading the page or
+You should see your library and **API connected**. New libraries start empty.
+Use **Add a book** to upload one DRM-free EPUB or PDF. Reloading the page or
 restarting both services preserves your login until the session expires or you
 sign out. Do not interchange `localhost` and `127.0.0.1`; browser cookies and
 trusted origins are specific to the address you use.
@@ -118,7 +119,10 @@ On Linux use `../.venv/bin/python`, and `npm` instead of `npm.cmd`.
 The backend tests use temporary SQLite databases and an in-process HTTPX ASGI
 client. They cover the health contract, authentication, CSRF, session rotation
 and expiry, throttling, simultaneous logins, catalog constraints, migrations,
-and restart persistence. They never modify your real catalog. Type checking and a
+and restart persistence. Upload tests additionally cover generated EPUB/PDF
+fixtures, metadata and JPEG covers, unsafe archives, actual-byte limits,
+timeouts, failed-write cleanup, and storage auditing. They never modify your
+real catalog. Type checking and a
 production build validate the frontend scaffold; type checking first generates
 Next.js route declarations so it also works before the first build. These checks
 do not establish reader
@@ -137,6 +141,8 @@ be running. This is a local production-build check, not a server deployment.
 | `EBOOK_TRUSTED_ORIGINS` | Backend configuration | JSON array of exact browser origins; defaults to `["http://127.0.0.1:3000"]` |
 | `EBOOK_SESSION_COOKIE_SECURE` | Backend configuration | Defaults to `false` for loopback HTTP only; non-loopback access requires `true` and HTTPS |
 | `EBOOK_SESSION_DAYS` | Backend configuration | Absolute session lifetime, default 7 days, range 1–30 |
+| `EBOOK_MAX_UPLOAD_BYTES` | Backend configuration and frontend `.env.local` | File limit, default 104857600 (100 MiB); keep both values aligned |
+| `EBOOK_PROCESSING_TIMEOUT_SECONDS` | Backend configuration | Worker timeout, default 30 seconds, range 1–120 |
 | `BACKEND_URL` | `frontend/.env.local` or environment | Server-only upstream API origin; defaults to `http://127.0.0.1:8000` |
 | `NEXT_TELEMETRY_DISABLED` | Frontend environment | Set to `1` to disable Next.js telemetry |
 
@@ -150,6 +156,15 @@ The browser requests `/api/v1/health`; Next.js forwards it to FastAPI. This avoi
 cross-origin browser configuration. `BACKEND_URL` accepts an HTTP(S) origin with
 no credentials, path, query, or fragment. Restart development after changing it;
 production rewrites require a rebuild. Do not put credentials in this setting.
+
+The frontend also uses Next.js's experimental `proxyClientMaxBodySize` and
+`proxyTimeout` settings for upload forwarding. The clone buffer is the file limit
+plus 64 KiB of multipart overhead; the upstream timeout is three minutes. A
+12 MiB generated EPUB was verified through the production proxy. Next.js can
+buffer substantial request data in memory, so the eventual production reverse
+proxy should route `/api` directly to FastAPI and apply its own body/time limits.
+This local configuration is not a replacement for that deployment work.
+See [Next.js proxy body limits](https://nextjs.org/docs/app/api-reference/config/next-config-js/proxyClientMaxBodySize).
 
 If port 8000 is occupied, select another backend port with `--port` and update
 `BACKEND_URL`. If port 3000 is occupied, use `npm.cmd run dev -- --port 3001`.
@@ -185,9 +200,85 @@ Public endpoints are health, CSRF bootstrap, login, and API documentation.
 responses exclude storage paths and hashes. Catalog listing supports `limit`
 (1–100, default 20) and `offset` (default 0).
 
-There are no catalog write or file-serving endpoints yet. Catalog records used
-by tests are synthetic fixtures in temporary databases; no demo books are added
-to your library.
+`GET /api/v1/upload-policy` reports the authenticated upload limit.
+`POST /api/v1/books` accepts a multipart field named `file` and requires the same
+Origin and CSRF protections as logout. It returns HTTP 201 for a new book or 200
+with `duplicate: true` for an existing file hash. `GET /api/v1/books/{id}/cover`
+serves only a generated JPEG after an ownership check. Original document access
+is not exposed yet. No demo books are added to your real library.
+
+## Upload validation and storage
+
+Files are detected by signature and document structure, independently of their
+name or supplied MIME type. The original filename is display metadata only;
+filesystem names are generated by the application. Each API process permits
+one active upload/inspection, returning a retryable 503 for another upload.
+
+The transport counts actual body bytes, including chunked requests, before
+multipart processing. A separate streamed file check enforces the configured
+file limit. Only one file is accepted; extra multipart fields/files are rejected.
+
+EPUB inspection checks ZIP paths, duplicate names, special files, encryption,
+CRC integrity, container/package XML, manifest resources, and reading order.
+XML DTDs/entities and external manifest resources are rejected. Archive limits
+are 5,000 entries, 64 MiB per member, 512 MiB expanded total, a 1,000:1 expansion
+ratio, and 2 MiB per parsed XML file. Known font obfuscation is distinguished
+from unsupported DRM. This is a bounded ingestion validator, not full EPUBCheck.
+
+EPUB metadata includes available title, creators, publisher, description, and
+language. Covers are recognized through EPUB 3 `cover-image` or EPUB 2 cover
+metadata. Supported raster covers are re-encoded as JPEG; missing, oversized,
+SVG-only, or unusable covers get a placeholder. Image decoding is limited to
+20 million pixels, and cover input to 20 MiB. XHTML guide-only covers are not
+extracted yet. Filename and unknown-author fallbacks handle incomplete metadata.
+
+PDFium opens PDFs, rejects encrypted documents, reads available title/author/
+subject metadata and page count, and attempts a first-page JPEG thumbnail.
+PDFs with no pages or over 20,000 pages are rejected. PDF metadata does not have
+a reliable standard publisher field; producer/software names are not substituted.
+Image-only scanned PDFs are accepted, without OCR or searchable-text claims.
+Not every page is rendered during validation; a successful upload is not a
+guarantee that a future reader will render every unusual page correctly.
+
+Both formats are inspected in an owned subprocess with a deadline. PDFium is
+never called concurrently from multiple API threads. This process boundary
+provides crash/time isolation, not an OS security sandbox or a hard memory cap.
+Linux deployment resource restrictions and parser dependency updates remain
+important. No book scripts, external resource downloads, or active covers are
+used by the library. Original EPUB content is not a sanitized reading artifact;
+sandboxing/sanitization must be addressed before reader content is served.
+
+```text
+data/
+├── library.sqlite3
+├── staging/                       # Temporary, generated upload directories
+└── books/
+    └── <generated-book-id>/
+        ├── original.epub          # Or original.pdf, preserved byte-for-byte
+        └── cover.jpg              # Present only when generation succeeds
+```
+
+Files are staged and flushed, inspected, then moved into their final directory
+before the metadata transaction commits. Rejected uploads and normal failed
+writes clean up their generated files. Cleanup checks for database references
+before deleting published files; if a commit succeeded but its acknowledgement
+failed, those files are preserved and a duplicate retry recovers the book.
+If the database cannot be checked, cleanup is deferred rather than risking data
+loss. SQLite and filesystem moves cannot share
+one atomic transaction: a crash between the move and commit can leave an
+unreferenced directory. No partial catalog record is published in that case.
+This is not a guarantee against disk failure or sudden power loss.
+
+With the backend stopped, run this read-only check from `backend/`:
+
+```powershell
+..\.venv\Scripts\python.exe -m app.cli audit-storage
+```
+
+It reports missing originals/covers, unreferenced book directories, and leftover
+staging entries, returning a nonzero exit status if issues exist. It does not
+delete or repair anything. Preserve flagged data for investigation or restore
+from a known backup; automated deletion is deliberately not implemented.
 
 ## Manual acceptance check
 
@@ -198,6 +289,17 @@ to your library.
 5. Stop and restart both services, then reload and confirm the session persists.
 6. Sign out and confirm the sign-in form returns.
 7. Open `/api/v1/books` in a private browser window; expect HTTP 401.
+8. Upload a small DRM-free EPUB and PDF. Both should appear with metadata and
+   covers, or an explicit placeholder when a cover is unavailable.
+9. Re-upload one file; confirm an already-in-library message and no extra card.
+10. Try a text file renamed to `.pdf`; confirm rejection without an extra card.
+11. Reload and restart both services; confirm the books and covers remain.
+
+The grid is paginated once there are more than 20 books. Refresh library retrieves
+the current page; successful uploads return to the first page. Uploads show a
+processing state rather than an estimated percentage. If a connection times out,
+refresh before retrying: the server may already have saved the book, and the hash
+check makes retrying identical bytes safe. Reading buttons are not present yet.
 
 The backend cookie is scoped to `/api`, so test authenticated API access through
 the frontend origin, not a different hostname. Tests passed on Windows; Android
@@ -235,12 +337,18 @@ dedicated local recovery workflow is not implemented yet.
 - `backend/app/security.py`: password hashing, token derivation, owner provisioning.
 - `backend/app/api.py`: session endpoints, CSRF, throttle, and owner-scoped catalog.
 - `backend/app/cli.py`: terminal migration and owner-creation commands.
+- `backend/app/body_limits.py`: pre-parser transport limits using Starlette.
+- `backend/app/documents.py`: bounded EPUB/PDF inspection and raster covers.
+- `backend/app/storage.py`: staging, process deadlines, hash deduplication,
+  filesystem/database coordination, and a read-only storage audit.
 - `backend/tests/`: isolated HTTP, integrity, and persistence checks.
 - `frontend/next.config.ts`: same-origin API forwarding and upstream validation.
 - `frontend/src/app/page.tsx`: server-rendered foundation page.
 - `frontend/src/components/backend-status.tsx`: browser health request, timeout,
   retry, and cleanup when the component unmounts.
 - `frontend/src/components/library-access.tsx`: login/logout and catalog states.
+- `frontend/src/components/book-upload.tsx`: file selection, upload, and feedback.
+- `frontend/src/components/book-grid.tsx`: cover cards and missing-cover fallback.
 - `frontend/src/lib/api.ts`: same-origin API client with timeouts and error handling.
 - `docs/development-plan.md`: scope, learning checkpoints, and compatibility decision.
 

@@ -1,7 +1,7 @@
 :root { color-scheme: light; font-family: system-ui, sans-serif; color: #242924; background: #f6f4ef; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { max-width: 760px; margin: 0 auto; padding: 64px 24px; }
+main { max-width: 1100px; margin: 0 auto; padding: 64px 24px; }
 .eyebrow { color: #526448; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; font-size: .8rem; }
 h1 { font-family: Georgia, serif; font-size: clamp(2.3rem, 7vw, 3.6rem); font-weight: 500; line-height: 1.1; margin: 20px 0; }
 h2 { font-size: 1.1rem; margin: 0 0 12px; }
@@ -22,8 +22,27 @@ input { display: block; width: 100%; min-height: 44px; padding: 10px; border: 1p
 input:focus-visible { outline: 3px solid #2163ae; outline-offset: 2px; }
 form button { margin-top: 20px; }
 .account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.catalog { padding: 0; list-style: none; }
-.catalog li { border-top: 1px solid #d4d9cd; padding: 16px 0; }
-.catalog span { display: block; margin-top: 6px; color: #555c52; }
+.upload-form { max-width: none; margin: 24px 0; padding: 20px 0; border-top: 1px solid #d4d9cd; border-bottom: 1px solid #d4d9cd; }
+.upload-form label { margin-top: 0; }
+#upload-help { margin: 6px 0 14px; font-size: .9rem; color: #555c52; }
+.upload-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.upload-controls input { flex: 1 1 230px; min-width: 0; }
+.upload-controls button { margin: 0; }
+.library-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+button.secondary { background: #eef1e9; color: #334e36; border: 1px solid #c5cebd; }
+.empty-library { text-align: center; padding: 48px 16px; color: #555c52; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 32px 24px; list-style: none; padding: 12px 0; }
+.book-card { min-width: 0; }
+.book-cover { aspect-ratio: 2 / 3; max-height: 320px; border-radius: 4px 10px 10px 4px; overflow: hidden; background: #e6e9e0; box-shadow: 2px 5px 12px #1b2e1720; }
+.book-cover img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.cover-placeholder { height: 100%; padding: 24px 18px 24px 24px; border-left: 8px solid #ffffff20; background: linear-gradient(135deg, #435e4a, #283c30); color: #fff8e8; display: flex; flex-direction: column; justify-content: space-between; }
+.pdf .cover-placeholder { background: linear-gradient(135deg, #81553d, #563c30); }
+.cover-placeholder span { font-size: .7rem; letter-spacing: .1em; }
+.cover-placeholder strong { font: 1.2rem/1.4 Georgia, serif; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+.book-details h3 { font-size: .97rem; line-height: 1.45; margin: 14px 0 4px; overflow-wrap: anywhere; }
+.book-author { margin: 0; color: #555c52; font-size: .85rem; overflow-wrap: anywhere; }
+.book-facts { font-size: .75rem; color: #555c52; margin: 8px 0; }
+.book-facts span { font-weight: 700; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; margin: 28px 0; }
 .footnote { border-top: 1px solid #d4d9cd; padding-top: 20px; color: #555c52; font-size: .9rem; }
-@media (max-width: 480px) { main { padding: 32px 20px; } }
+@media (max-width: 480px) { main { padding: 32px 20px; } .connection { padding: 18px; } .book-grid { gap: 24px 16px; } }

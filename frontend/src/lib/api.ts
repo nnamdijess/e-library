@@ -4,9 +4,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, options: RequestInit = {}, timeoutMs = 10000): Promise<T> {
   const controller = new AbortController();
-  const timeout = options.signal ? undefined : setTimeout(() => controller.abort(), 10000);
+  const timeout = options.signal ? undefined : setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`/api/v1${path}`, {
       ...options,
@@ -16,7 +16,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
-      throw new ApiError(response.status, body?.detail?.message ?? "The API is unavailable. Try again.");
+      const message = body?.detail?.message ?? (typeof body?.detail === "string" ? body.detail : null);
+      throw new ApiError(response.status, message ?? (response.status === 413 ? "The file exceeds the upload limit." : "The API is unavailable. Try again."));
     }
     return response.status === 204 ? undefined as T : await response.json();
   } finally {

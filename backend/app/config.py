@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     trusted_origins: list[str] = ["http://127.0.0.1:3000"]
     session_cookie_secure: bool = False
     session_days: int = Field(default=7, ge=1, le=30)
+    max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024, le=1024 * 1024 * 1024)
+    processing_timeout_seconds: int = Field(default=30, ge=1, le=120)
 
     @model_validator(mode="after")
     def validate_security(self):

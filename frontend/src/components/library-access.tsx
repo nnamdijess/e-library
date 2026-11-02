@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { BookGrid, type Catalog } from "./book-grid";
+import { BookUpload } from "./book-upload";
 
 type Identity = { user: { username: string }; csrf_token: string };
-type Catalog = { items: { id: string; title: string; authors: string[]; format: "epub" | "pdf" }[]; total: number };
 type Phase = "loading" | "signed-out" | "signed-in" | "error";
 
 export function LibraryAccess() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [csrf, setCsrf] = useState("");
-  const [catalog, setCatalog] = useState<Catalog>({ items: [], total: 0 });
+  const [catalog, setCatalog] = useState<Catalog>({ items: [], total: 0, limit: 20, offset: 0 });
+  const [maxUploadBytes, setMaxUploadBytes] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -23,7 +27,7 @@ export function LibraryAccess() {
     setPhase("loading");
     setError("");
     setIdentity(null);
-    setCatalog({ items: [], total: 0 });
+    setCatalog({ items: [], total: 0, limit: 20, offset: 0 });
 
     async function load() {
       const options = { signal: controller.signal };
@@ -38,11 +42,15 @@ export function LibraryAccess() {
         if (active) { setCsrf(initial.csrf_token); setPhase("signed-out"); }
         return;
       }
-      const books = await api<Catalog>("/books", options);
+      const [books, policy] = await Promise.all([
+        api<Catalog>("/books", options),
+        api<{ max_bytes: number }>("/upload-policy", options),
+      ]);
       if (active) {
         setIdentity(current);
         setCsrf(current.csrf_token);
         setCatalog(books);
+        setMaxUploadBytes(policy.max_bytes);
         setPhase("signed-in");
       }
     }
@@ -88,11 +96,25 @@ export function LibraryAccess() {
         method: "POST", headers: { "X-CSRF-Token": csrf },
       });
       setIdentity(null);
-      setCatalog({ items: [], total: 0 });
+      setCatalog({ items: [], total: 0, limit: 20, offset: 0 });
       setAttempt((value) => value + 1);
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "Could not sign out. Check the connection and try again.");
     } finally { setBusy(false); }
+  }
+
+  async function refreshCatalog(offset: number) {
+    setRefreshing(true);
+    setError("");
+    try {
+      setCatalog(await api<Catalog>(`/books?offset=${offset}`));
+    } finally { setRefreshing(false); }
+  }
+
+  function navigate(offset: number) {
+    void refreshCatalog(offset).catch((reason) => {
+      setError(reason instanceof ApiError ? reason.message : "Could not refresh the library. Try again.");
+    });
   }
 
   return (
@@ -115,12 +137,16 @@ export function LibraryAccess() {
       )}
       {phase === "signed-in" && identity && (
         <>
-          <div className="account"><p>Signed in as <strong>{identity.user.username}</strong></p><button onClick={signOut} disabled={busy}>{busy ? "Signing out…" : "Sign out"}</button></div>
-          {catalog.total === 0 ? <p>Your catalog is empty. EPUB and PDF uploads are planned for Milestone 3.</p> : (
-            <><p>Showing {catalog.items.length} of {catalog.total} books.</p><ul className="catalog">{catalog.items.map((book) => (
-              <li key={book.id}><strong>{book.title}</strong><span>{book.authors.join(", ") || "Unknown author"} · {book.format.toUpperCase()}</span></li>
-            ))}</ul></>
-          )}
+          <div className="account"><p>Signed in as <strong>{identity.user.username}</strong></p><button onClick={signOut} disabled={busy || uploading || refreshing}>{busy ? "Signing out…" : "Sign out"}</button></div>
+          <BookUpload csrf={csrf} maxBytes={maxUploadBytes} onUploaded={() => refreshCatalog(0)} onBusyChange={setUploading} />
+          <div className="library-tools"><p>{catalog.total} {catalog.total === 1 ? "book" : "books"}</p><button className="secondary" disabled={refreshing || uploading || busy} onClick={() => navigate(catalog.offset)}>{refreshing ? "Refreshing…" : "Refresh library"}</button></div>
+          {catalog.total === 0 ? <p className="empty-library">Your library starts here. Add an EPUB or PDF above.</p> : <BookGrid books={catalog.items} />}
+          {catalog.total > catalog.limit && <nav className="pagination" aria-label="Library pages">
+            <button disabled={refreshing || uploading || catalog.offset === 0} onClick={() => navigate(Math.max(0, catalog.offset - catalog.limit))}>Previous</button>
+            <span>{catalog.offset + 1}–{Math.min(catalog.offset + catalog.limit, catalog.total)} of {catalog.total}</span>
+            <button disabled={refreshing || uploading || catalog.offset + catalog.limit >= catalog.total} onClick={() => navigate(catalog.offset + catalog.limit)}>Next</button>
+          </nav>}
+          <p className="footnote">Books are stored in your library. Opening and reading them comes in the next milestones.</p>
         </>
       )}
     </section>

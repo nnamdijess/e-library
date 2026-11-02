@@ -11,7 +11,7 @@ export default function Home() {
       <BackendStatus />
       <section aria-labelledby="next-step">
         <h2 id="next-step">What comes next</h2>
-        <p>Milestone 2 adds owner login and a persistent SQLite catalog. Uploads, EPUB and PDF readers, and reading progress are not implemented yet.</p>
+        <p>Milestone 3 adds EPUB and PDF uploads, metadata, and covers. Reading engines and reading progress come in the next milestones.</p>
       </section>
       <p className="footnote">Windows and Android are the initial testing devices. iPadOS 12.5.8 compatibility requires a separate investigation before reader implementation.</p>
     </main>
