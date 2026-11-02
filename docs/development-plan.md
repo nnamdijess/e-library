@@ -1,7 +1,7 @@
 # Incremental development plan
 
-Only Milestone 1 is approved for implementation. Each later milestone needs
-review before work starts.
+Milestones 1 and 2 are approved and implemented. Each later milestone needs
+review before work starts. Uploads, readers, and progress remain future scope.
 
 | Milestone | Acceptance | Learning focus |
 | --- | --- | --- |
@@ -20,8 +20,9 @@ reading, statistics, and advanced synchronization are future scope.
 
 Next.js owns the interface. FastAPI owns authorization, ingestion, persistence,
 and controlled file access. SQLite will store metadata and user state; a private
-filesystem directory will store documents and generated covers. Neither exists
-in Milestone 1. EPUB and PDF get separate engines with a shared progress API.
+filesystem directory will store documents and generated covers. Milestone 2 adds
+the database and an empty read-only catalog; document storage is future work.
+EPUB and PDF get separate engines with a shared progress API.
 
 Progress will use EPUB CFI or a PDF page and normalized position. Server revisions
 will reject stale writes, independent of client clocks. Full offline queuing and
@@ -57,7 +58,7 @@ Sources checked during Milestone 1:
 
 ## Operational boundaries
 
-Local development binds to 127.0.0.1. Authentication, persistent data, production
-security, Docker, and Tailscale configuration are not implemented. Never modify
+Local development binds to 127.0.0.1. Authentication and SQLite persistence exist;
+production hardening, Docker, and Tailscale configuration remain future work. Never modify
 Vaulted, Nextcloud, or other existing services as part of this project without
 separate explicit authorization. No server access is assumed.

@@ -16,5 +16,14 @@ button { font: inherit; background: #334e36; color: #fff; border: 0; border-radi
 button:hover { background: #233c26; }
 button:focus-visible { outline: 3px solid #2163ae; outline-offset: 4px; }
 button:disabled { opacity: .65; cursor: wait; }
+form { max-width: 360px; }
+label { display: block; margin: 16px 0 6px; font-weight: 600; }
+input { display: block; width: 100%; min-height: 44px; padding: 10px; border: 1px solid #858e7e; border-radius: 6px; font: inherit; background: white; color: #242924; }
+input:focus-visible { outline: 3px solid #2163ae; outline-offset: 2px; }
+form button { margin-top: 20px; }
+.account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.catalog { padding: 0; list-style: none; }
+.catalog li { border-top: 1px solid #d4d9cd; padding: 16px 0; }
+.catalog span { display: block; margin-top: 6px; color: #555c52; }
 .footnote { border-top: 1px solid #d4d9cd; padding-top: 20px; color: #555c52; font-size: .9rem; }
 @media (max-width: 480px) { main { padding: 32px 20px; } }

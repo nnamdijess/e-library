@@ -6,9 +6,9 @@ from app.config import Settings
 from app.main import create_app
 
 
-def test_health_contract():
+def test_health_contract(tmp_path):
     # Ignore any developer .env file: the test owns its configuration.
-    application = create_app(Settings(_env_file=None))
+    application = create_app(Settings(_env_file=None, data_dir=tmp_path))
     async def request_health():
         transport = httpx.ASGITransport(app=application)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
