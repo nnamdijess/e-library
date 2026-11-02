@@ -2,10 +2,12 @@
 
 A personal, self-hosted EPUB and PDF library, developed incrementally.
 
-**Completed scope: Milestones 1–3.** The application has owner login,
+**Completed scope: Milestones 1–4.** The application has owner login,
 revocable cookie sessions, SQLite metadata, validated EPUB/PDF uploads, private
 file storage, metadata extraction, covers/placeholders, and a unified library
-grid. Readers and reading progress are not implemented. Keep development on
+grid, plus an EPUB reader with pagination, chapter/contents navigation, internal
+links, and return-to-library navigation. PDF reading and saved reading progress
+are not implemented. Keep development on
 loopback; deployment and remote device access belong to later milestones.
 
 ## Prerequisites
@@ -16,6 +18,10 @@ loopback; deployment and remote device access belong to later milestones.
 
 No Docker, WSL, external database, or cloud service is required for development.
 The commands below start from the repository root unless stated otherwise.
+
+When updating an existing checkout, install the updated Python requirements and
+run `npm.cmd ci` in `frontend/`. No new database migration is needed for the EPUB
+reader; existing uploaded books get their reading copy when first opened.
 
 ## Windows setup (PowerShell)
 
@@ -128,6 +134,33 @@ Next.js route declarations so it also works before the first build. These checks
 do not establish reader
 or older-iPad compatibility.
 
+### Repeatable reader browser tests
+
+The reader has Playwright checks for desktop Chromium, an Android-style touch
+viewport, and an iPhone-style WebKit viewport. From `frontend/` on Windows:
+
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = [System.IO.Path]::GetFullPath('../.cache/ms-playwright')
+npx.cmd playwright install chromium webkit
+npm.cmd run test:e2e
+```
+
+On Linux, use `PLAYWRIGHT_BROWSERS_PATH="$(pwd)/../.cache/ms-playwright" npx playwright install chromium webkit`
+then `npm run test:e2e`. Browser system libraries may be required on Linux;
+installation on your Ubuntu server has not been performed.
+
+The tests start a disposable API on loopback port 8001 and a Next.js development
+server on port 3001. Those ports must be free; tests refuse to reuse another
+service. They seed generated test content and a test-only account in a temporary
+database, independent of your library on port 8000. Screenshots/traces go into
+ignored `.cache/playwright-results/`. An interrupted process can leave a temporary
+test directory under `.cache/`; it is not part of your library.
+
+Tests verify real rendering, images, pagination, table-of-contents jumps,
+internal links using touch on mobile layouts, resizing, return navigation,
+authentication rejection, no external book requests, and blocked document scripts.
+WebKit emulation is not a physical iPhone or a test of iPadOS 12.5.8.
+
 After building, `npm.cmd start` starts the production frontend on loopback at
 port 3000. Stop the frontend development process first. The backend must still
 be running. This is a local production-build check, not a server deployment.
@@ -204,8 +237,9 @@ responses exclude storage paths and hashes. Catalog listing supports `limit`
 `POST /api/v1/books` accepts a multipart field named `file` and requires the same
 Origin and CSRF protections as logout. It returns HTTP 201 for a new book or 200
 with `duplicate: true` for an existing file hash. `GET /api/v1/books/{id}/cover`
-serves only a generated JPEG after an ownership check. Original document access
-is not exposed yet. No demo books are added to your real library.
+serves only a generated JPEG after an ownership check. EPUB reading uses separate
+authorized routes described below; original document access remains unexposed.
+No demo books are added to your real library.
 
 ## Upload validation and storage
 
@@ -249,8 +283,8 @@ never called concurrently from multiple API threads. This process boundary
 provides crash/time isolation, not an OS security sandbox or a hard memory cap.
 Linux deployment resource restrictions and parser dependency updates remain
 important. No book scripts, external resource downloads, or active covers are
-used by the library. Original EPUB content is not a sanitized reading artifact;
-sandboxing/sanitization must be addressed before reader content is served.
+used by the library. The reader uses a separate sanitized artifact rather than
+serving original EPUB content directly.
 
 ```text
 data/
@@ -259,7 +293,9 @@ data/
 └── books/
     └── <generated-book-id>/
         ├── original.epub          # Or original.pdf, preserved byte-for-byte
-        └── cover.jpg              # Present only when generation succeeds
+        ├── cover.jpg              # Present only when generation succeeds
+        ├── reader-v1.epub         # Generated when an EPUB is first opened
+        └── reader-v1.json         # Version, source hash, and notices
 ```
 
 Files are staged and flushed, inspected, then moved into their final directory
@@ -298,22 +334,77 @@ from a known backup; automated deletion is deliberately not implemented.
 9. Re-upload one file; confirm an already-in-library message and no extra card.
 10. Try a text file renamed to `.pdf`; confirm rejection without an extra card.
 11. Reload and restart both services; confirm the books and covers remain.
+12. Select **Read book** on an EPUB. Use Previous/Next, Contents, and an internal
+    chapter link if present, then return with **Library**.
+13. Resize the desktop browser or rotate a phone and check that the page remains
+    usable. Test the actual iPhone Safari and Android browser when private HTTPS
+    access is configured; the loopback URL is local to Windows.
 
 The grid is paginated once there are more than 20 books. Refresh library retrieves
 the current page; successful uploads return to the first page. Uploads show a
 processing state rather than an estimated percentage. If a connection times out,
 refresh before retrying: the server may already have saved the book, and the hash
-check makes retrying identical bytes safe. Reading buttons are not present yet.
+check makes retrying identical bytes safe. EPUBs have a Read book link; PDF cards
+clearly indicate that their reader is still planned.
 
 The backend cookie is scoped to `/api`, so test authenticated API access through
 the frontend origin, not a different hostname. Tests passed on Windows; Android
 and iPadOS 12.5.8 have not been verified. Core reading development now prioritizes
-Windows and Android; dedicated older-iPad compatibility work follows the usable
+Windows, Android, and modern iPhone Safari; dedicated older-iPad compatibility work follows the usable
 online MVP. See the development plan for the retained compatibility requirements.
 
 A private HTTPS test-access procedure is prepared in
 [docs/private-test-access.md](docs/private-test-access.md). It has not been
 activated and is not a prerequisite for local reader development.
+
+## EPUB reader and content boundary
+
+Opening an EPUB first checks authentication and builds a versioned reading copy
+in a bounded subprocess. The original file's SHA-256 must match the catalog.
+The copy contains semantic XHTML, locally re-encoded JPEG images, generated
+navigation, and a controlled serif layout. Publisher scripts, event attributes,
+forms, frames, external links/resources, publisher CSS, and embedded fonts are
+omitted. GIFs become static images. SVG/MathML/interactive content is not supported
+in this first layout. Fixed-layout EPUBs are rejected with an explanatory error.
+
+Existing EPUB 3 navigation or EPUB 2 NCX supplies the contents list when readable;
+otherwise chapter headings provide a fallback. Source chapter paths and internal
+fragment links are mapped to generated paths. Contents entries are currently
+flattened rather than displayed as a full nested hierarchy.
+
+`GET /api/v1/books/{id}/epub` prepares or retrieves metadata for the authorized
+reading copy. `GET /api/v1/books/{id}/epub/1/content` returns only that generated
+EPUB. Invalid artifact versions and non-EPUB books do not fall back to originals.
+The interface checks the expected versioned URL before loading EPUB.js. Reading
+copies are private, have no-store responses, and are cached beside the original
+for subsequent opens. Preparation and uploads share a processing gate.
+
+Each chapter has a strict CSP including `script-src 'none'`, no connections,
+no forms or child frames, and only local generated blob/data images. EPUB.js's
+iframe sandbox retains navigation restrictions. Its `allowScriptedContent` flag
+is enabled **only for our generated content** because WebKit otherwise blocks
+even parent-managed input handlers. This flag is not permission to load raw
+EPUBs: enabling it for unsanitized books is unsafe. The sanitizer, controlled
+artifact route, and script-blocking CSP are required parts of the boundary.
+Browser tests attempt script insertion and confirm it does not execute, while
+verifying in-book touch links still work.
+
+The EPUB.js adapter exposes page/chapter navigation, cleanup, and versioned CFI
+location events independently of the React library interface. Resize observation
+begins after the first reported CFI, avoiding a blank-view initialization race.
+Within an open reader, the engine reflows and repositions content on resize.
+Displayed page numbers belong to the current chapter and change with viewport
+size; they are not stable book-wide page numbers.
+
+**Reading progress is not saved yet.** Leaving/reopening a book starts again at
+the beginning. The UI says so; no backend progress persistence or cross-device
+resume is claimed. Those are Milestone 6.
+
+Reading-copy version 1 must remain structurally stable once CFIs are persisted.
+Sanitizer/parser changes that alter the document tree require a new artifact
+version and an explicit location migration strategy. Preserve reading copies in
+backups, particularly after progress and annotations are added. The initial
+generated-content limit is 64 MiB and the chapter limit is 2,000.
 
 ## Database and recovery
 
@@ -350,6 +441,10 @@ dedicated local recovery workflow is not implemented yet.
 - `backend/app/documents.py`: bounded EPUB/PDF inspection and raster covers.
 - `backend/app/storage.py`: staging, process deadlines, hash deduplication,
   filesystem/database coordination, and a read-only storage audit.
+- `backend/app/workers.py`: owned process startup, deadline, and termination.
+- `backend/app/epub_artifact.py`: versioned sanitization, image conversion, TOC,
+  and stable chapter mapping for the reading copy.
+- `backend/app/reader_service.py`: private cache creation and retrieval.
 - `backend/tests/`: isolated HTTP, integrity, and persistence checks.
 - `frontend/next.config.ts`: same-origin API forwarding and upstream validation.
 - `frontend/src/app/page.tsx`: server-rendered foundation page.
@@ -358,6 +453,10 @@ dedicated local recovery workflow is not implemented yet.
 - `frontend/src/components/library-access.tsx`: login/logout and catalog states.
 - `frontend/src/components/book-upload.tsx`: file selection, upload, and feedback.
 - `frontend/src/components/book-grid.tsx`: cover cards and missing-cover fallback.
+- `frontend/src/components/epub-reader.tsx`: reader UI, loading/errors, and controls.
+- `frontend/src/readers/epub/adapter.ts`: EPUB.js lifecycle and location events.
+- `frontend/src/readers/types.ts`: reader and location contracts.
+- `frontend/tests/e2e/reader.spec.ts`: isolated browser acceptance workflow.
 - `frontend/src/lib/api.ts`: same-origin API client with timeouts and error handling.
 - `docs/development-plan.md`: scope, learning checkpoints, and compatibility decision.
 

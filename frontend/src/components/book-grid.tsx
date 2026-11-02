@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export type LibraryBook = {
   id: string;
@@ -34,6 +35,7 @@ export function BookGrid({ books }: { books: LibraryBook[] }) {
         <h3>{book.title}</h3>
         <p className="book-author">{book.authors.join(", ") || "Unknown author"}</p>
         <p className="book-facts"><span>{book.format.toUpperCase()}</span> · {(book.byte_size / (1024 * 1024)).toFixed(1)} MiB{book.page_count ? ` · ${book.page_count} pages` : ""}</p>
+        {book.format === "epub" ? <Link className="read-book" href={`/read/${book.id}`}>Read book<span className="sr-only">: {book.title}</span></Link> : <p className="book-facts">PDF reading coming next</p>}
       </div>
     </li>
   ))}</ul>;

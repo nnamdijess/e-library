@@ -1,9 +1,11 @@
 # Incremental development plan
 
-Milestones 1–3 are approved and implemented. Each later milestone needs review
-before work starts. Readers and progress remain future scope.
+Milestones 1–4 are approved and implemented. Each later milestone needs review
+before work starts. PDF reading and durable progress remain future scope.
 
-The owner has prioritized a working, usable app on Windows and Android. Complete
+The owner has prioritized a working, usable app on Windows, Android, and modern
+iPhone Safari. iPhone support is a primary requirement and has not been deferred.
+Complete
 the online EPUB/PDF reading and progress milestones before dedicated older-iPad
 compatibility work. iPad compatibility remains a goal and is not a gate on the
 next reader milestone. A separate legacy interface is an option, not an approved
@@ -40,7 +42,7 @@ cross-device conflict resolution come later.
 The owner reports an iPad running iPadOS 12.5.8 and has connected it to Tailscale
 using an older client. This observed connection is useful, but does not establish
 browser/reader compatibility or continued network reachability. Windows and
-Android are the first acceptance targets. Dedicated iPad compatibility testing
+Android and modern iPhone Safari are the first acceptance targets. Dedicated iPad compatibility testing
 is deferred until the core online reading workflow is usable.
 
 Current Next.js documentation specifies Safari 16.4+; the current PDF.js legacy
@@ -65,12 +67,14 @@ the option of a lightweight interface later without duplicating the library.
 
 ## Next implementation checkpoint
 
-Proposed Milestone 4 scope: open a library EPUB in a browser reader, navigate
+Completed Milestone 4 scope: open a library EPUB in a browser reader, navigate
 pages and chapters, show its table of contents, return to the library, and expose
 CFI location events behind a reader adapter. Safe content delivery and script/
-external-resource restrictions are prerequisites. Test on current Windows and
-Android browsers. Durable progress belongs to Milestone 6; PDF rendering belongs
-to Milestone 5. The next major implementation still needs the owner's approval.
+external-resource restrictions are implemented in a versioned reading copy.
+Automated browser tests pass in desktop Chromium, an Android-style touch layout,
+and an iPhone-style WebKit layout. Actual Android/iPhone device tests remain
+separate acceptance checks. Durable progress belongs to Milestone 6; PDF rendering
+belongs to Milestone 5. The next major implementation still needs the owner's approval.
 
 Sources checked during Milestone 1:
 

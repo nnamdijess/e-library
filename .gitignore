@@ -17,6 +17,8 @@ pytest-cache-files-*/
 *.tsbuildinfo
 .cache/
 *.log
+test-results/
+playwright-report/
 
 # Editor and OS files
 .DS_Store

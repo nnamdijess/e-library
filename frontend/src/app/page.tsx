@@ -11,9 +11,9 @@ export default function Home() {
       <BackendStatus />
       <section aria-labelledby="next-step">
         <h2 id="next-step">What comes next</h2>
-        <p>Milestone 3 adds EPUB and PDF uploads, metadata, and covers. Reading engines and reading progress come in the next milestones.</p>
+        <p>Open an EPUB with Read book. PDF reading and automatic progress saving are coming next.</p>
       </section>
-      <p className="footnote">Windows and Android are the first testing targets. Older iPad compatibility remains planned.</p>
+      <p className="footnote">Built for Windows, Android, and modern iPhone browsers. Older iPad compatibility remains planned; device verification is ongoing.</p>
     </main>
   );
 }

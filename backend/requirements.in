@@ -9,6 +9,8 @@ defusedxml==0.7.1
 pillow==13.0.0
 pypdfium2==5.14.0
 python-multipart==0.0.33
+nh3==0.3.7
+html5lib==1.1
 
 # Local development/test dependencies.
 pytest==9.2.0

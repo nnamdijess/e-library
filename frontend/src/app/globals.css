@@ -46,3 +46,25 @@ button.secondary { background: #eef1e9; color: #334e36; border: 1px solid #c5ceb
 .pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; margin: 28px 0; }
 .footnote { border-top: 1px solid #d4d9cd; padding-top: 20px; color: #555c52; font-size: .9rem; }
 @media (max-width: 480px) { main { padding: 32px 20px; } .connection { padding: 18px; } .book-grid { gap: 24px 16px; } }
+.read-book { display: inline-block; padding: 10px 0; min-height: 44px; color: #315d43; font-weight: 650; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+main.reader-page { max-width: none; padding: 0; margin: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: #faf8f2; }
+.reader-toolbar { display: flex; gap: 16px; align-items: center; padding: max(12px, env(safe-area-inset-top)) 20px 12px; border-bottom: 1px solid #d4d9cd; flex-shrink: 0; }
+.reader-back { color: #315d43; text-decoration: none; padding: 12px 0; white-space: nowrap; }
+.reader-heading { flex: 1; min-width: 0; }
+.reader-heading h1 { font: 600 1rem/1.4 system-ui, sans-serif; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-heading p { font-size: .8rem; margin: 2px 0 0; color: #555c52; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-messages { flex-shrink: 0; padding: 0 20px; font-size: .8rem; }
+.reader-save-note { margin: 6px 0; color: #666d60; }
+.reader-content { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.epub-host { width: 100%; height: 100%; }
+.reader-loading { position: absolute; inset: 20px 0 auto; text-align: center; z-index: 2; }
+.reader-footer { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid #d4d9cd; flex-shrink: 0; }
+.reader-footer p { margin: 0; font-size: .85rem; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+.reader-toc { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 94%); background: #fffdf8; padding: 20px; overflow-y: auto; z-index: 5; box-shadow: -3px 0 15px #26352125; }
+.reader-toc ol { list-style: none; padding: 0; }
+.reader-toc li { margin: 8px 0; }
+.reader-toc li button { width: 100%; text-align: start; background: #eef1e9; color: #263d2a; }
+.reader-error { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: #9b3728; padding: 8px 0; }
+.reader-error button { font-size: .8rem; }
+@media (max-width: 480px) { .reader-toolbar { gap: 10px; padding-inline: 12px; } .reader-heading p { display: none; } .reader-footer { padding-inline: 12px; } .reader-footer button { padding-inline: 12px; } .reader-footer p { font-size: .75rem; } }

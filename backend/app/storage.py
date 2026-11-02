@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import hashlib
 import json
 import logging
-import multiprocessing
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.documents import InvalidDocument, clean_text, process_document
 from app.models import Book
+from app.workers import run_document_worker
 
 logger = logging.getLogger(__name__)
 
@@ -87,34 +87,17 @@ def cleanup_uncommitted_directory(settings: Settings, engine: Engine, directory:
 def inspect_in_process(source: Path, directory: Path, fallback: str, timeout: int) -> Inspection:
     # multiprocessing handles the Windows virtualenv launcher correctly and gives
     # us an owned process handle, unlike killing an intermediate shell/launcher.
-    process = multiprocessing.get_context("spawn").Process(
-        target=process_document, args=(str(source), str(directory), fallback), daemon=True,
-    )
-    process.start()
+    run_document_worker(process_document, (str(source), str(directory), fallback), timeout)
     try:
-        process.join(timeout)
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
-            if process.is_alive():
-                process.kill()
-                process.join()
-            raise InvalidDocument("Document processing timed out. Try a smaller or simpler book.", "processing_timeout")
         result_path = directory / "result.json"
-        if process.exitcode != 0 or not result_path.is_file() or result_path.stat().st_size > 256 * 1024:
+        if not result_path.is_file() or result_path.stat().st_size > 256 * 1024:
             raise InvalidDocument("The document processor could not finish safely.")
-        try:
-            result = json.loads(result_path.read_text(encoding="utf-8"))
-            if not result["ok"]:
-                raise InvalidDocument(result["message"], result["code"])
-            return Inspection.model_validate(result["metadata"])
-        except (KeyError, ValueError, TypeError, ValidationError) as error:
-            raise InvalidDocument("The document processor returned an invalid result.") from error
-    finally:
-        if process.is_alive():
-            process.kill()
-            process.join()
-        process.close()
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        if not result["ok"]:
+            raise InvalidDocument(result["message"], result["code"])
+        return Inspection.model_validate(result["metadata"])
+    except (KeyError, ValueError, TypeError, ValidationError) as error:
+        raise InvalidDocument("The document processor returned an invalid result.") from error
 
 
 def existing_book(engine: Engine, owner_id: int, digest: str) -> Book | None:

@@ -17,6 +17,8 @@ from app.documents import InvalidDocument
 from app.models import Book, LoginSession, LoginThrottle, User
 from app.security import csrf_token, dummy_hash, password_hasher, token_hash, verify_password
 from app.storage import StorageFailure, ingest_book, storage_path
+from app.epub_artifact import ARTIFACT_VERSION
+from app.reader_service import cached_copy, ensure_reading_copy
 
 router = APIRouter(prefix="/api/v1")
 COOKIE = "ebook_session"
@@ -258,3 +260,45 @@ def book_cover(book_id: str, request: Request, db: Database, user: Owner):
     if not path.is_file():
         fail(404, "cover_not_found", "Cover not found.")
     return FileResponse(path, media_type="image/jpeg", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+async def authorized_reading_copy(book_id: str, request: Request, db: Session, user: User):
+    item = db.scalar(select(Book).where(Book.id == book_id, Book.owner_id == user.id))
+    if item is None:
+        fail(404, "book_not_found", "Book not found.")
+    if item.format != "epub":
+        fail(409, "reader_format", "This reader opens EPUB books. PDF reading is coming next.")
+    key, digest = item.storage_key, item.sha256
+    db.commit()
+    settings = request.app.state.settings
+    try:
+        existing = cached_copy(settings, key, digest)
+        if existing:
+            return existing
+        lock = request.app.state.upload_lock
+        try:
+            lock.acquire_nowait()
+        except WouldBlock:
+            raise HTTPException(503, detail={"code": "reader_busy", "message": "Another book is being processed. Try opening this book again shortly."}, headers={"Retry-After": "2"})
+        try:
+            return await run_in_threadpool(ensure_reading_copy, settings, key, digest)
+        finally:
+            lock.release()
+    except InvalidDocument as error:
+        fail(422, error.code, str(error))
+    except (StorageFailure, OSError, ValueError):
+        fail(500, "reader_preparation_failed", "The reading copy could not be prepared. Check the stored book and try again.")
+
+
+@router.get("/books/{book_id}/epub")
+async def epub_reader_info(book_id: str, request: Request, db: Database, user: Owner):
+    copy = await authorized_reading_copy(book_id, request, db, user)
+    return {"artifact_version": ARTIFACT_VERSION, "content_url": f"/api/v1/books/{book_id}/epub/{ARTIFACT_VERSION}/content", "warnings": copy.warnings}
+
+
+@router.get("/books/{book_id}/epub/{version}/content")
+async def epub_reading_content(book_id: str, version: int, request: Request, db: Database, user: Owner):
+    if version != ARTIFACT_VERSION:
+        fail(404, "reader_version", "Reading copy version not found.")
+    copy = await authorized_reading_copy(book_id, request, db, user)
+    return FileResponse(copy.path, media_type="application/epub+zip", filename=f"reader-v{version}.epub", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
