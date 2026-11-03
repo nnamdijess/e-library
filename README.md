@@ -6,8 +6,8 @@ A personal, self-hosted EPUB and PDF library, developed incrementally.
 revocable cookie sessions, SQLite metadata, validated EPUB/PDF uploads, private
 file storage, metadata extraction, covers/placeholders, and a unified library
 grid, plus an EPUB reader with pagination, chapter/contents navigation, internal
-links, PDF.js page rendering, and confirmed server-side progress with CFI/page restoration. Keep development on
-loopback; deployment and remote device access belong to later milestones.
+links, PDF.js page rendering, and confirmed server-side progress with CFI/page restoration. Ubuntu Compose deployment and backup/recovery tooling are prepared; actual server
+deployment and container build validation remain operator steps. See the guides below.
 
 ## Prerequisites
 
@@ -33,6 +33,19 @@ circle on the home page contains sign-in details, Sign out, and an app-wide
 theme selector. PDFs also support arrow/Page Up/Down keys and horizontal page
 swipes when the page fits horizontally; wide zoomed pages retain panning.
 See [library and navigation controls](docs/library-and-navigation.md).
+
+## Ubuntu deployment and recovery
+
+- [Ubuntu deployment guide](docs/ubuntu-deployment.md): isolated Compose stack,
+  private HTTPS/Tailscale access, first installation or Windows-library transfer,
+  and upgrades alongside your existing services.
+- [Backup and recovery](docs/backup-recovery.md): verified offline archives,
+  empty-directory restores, automatic session revocation and restore drills.
+
+The stack is prepared rather than deployed. Docker image builds cannot be run in
+this Windows environment; a manual Linux validation workflow is provided. No
+server configuration or existing services have been changed. Git transfers source
+code; transfer your existing library separately using a verified backup archive.
 
 ## Windows setup (PowerShell)
 
@@ -269,7 +282,8 @@ Missing manifest IDs and ambiguous duplicate IDs are rejected. Duplicate IDs
 used only for raster cover images are tolerated with an upload warning when no
 spine, TOC, fallback, or media-overlay reference uses that ID. The first listed
 cover supplies the thumbnail; the original EPUB is not rewritten.
-XML DTDs/entities and external manifest resources are rejected. Archive limits
+Entity definitions and external manifest resources are rejected. Legacy DOCTYPE
+declarations are allowed without fetching their external DTDs. Archive limits
 are 5,000 entries, 64 MiB per member, 512 MiB expanded total, a 1,000:1 expansion
 ratio, and 2 MiB per parsed XML file. Known font obfuscation is distinguished
 from unsupported DRM. This is a bounded ingestion validator, not full EPUBCheck.
@@ -434,12 +448,13 @@ and short transactions. Password hashing runs outside database transactions.
 WAL is not needed for this milestone; we can evaluate it with real upload and
 reading traffic later.
 
-For a development backup, stop the backend and copy the complete `data/`
-directory to separate storage you control. Restore while the backend is stopped.
-The database contains private password hashes and session records, so protect
-backups like credentials. Automated consistent backups and restore drills are
-part of deployment work. Do not delete the database to reset a password; a
-dedicated local recovery workflow is not implemented yet.
+Use the offline backup/verification/restore CLI in [backup and recovery](docs/backup-recovery.md).
+The API must be stopped; a cross-process data lease enforces this for current
+versions. Run one API worker per data directory. Restores require an empty
+destination and revoke restored sessions while preserving owner credentials,
+books, progress, preferences and reading copies. Archives are private, unencrypted
+data; keep an independent protected copy outside this server disk. Do not delete
+the database to reset a password; password-reset recovery remains separate work.
 
 ## Files to explore
 
@@ -488,5 +503,5 @@ git commit -m "Describe the completed change"
 ```
 
 Local environment files, dependencies, caches, and future `data/` are ignored.
-No remote repository is configured automatically. Future books, credentials,
-and reading history must remain outside version control.
+The source repository is https://github.com/nnamdijess/e-library. Books, databases,
+backups, credentials and reading history remain outside version control.

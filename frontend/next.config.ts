@@ -17,6 +17,7 @@ if (
 }
 
 const config: NextConfig = {
+  output: process.env.EBOOK_STANDALONE === "1" ? "standalone" : undefined,
   // The floating dev badge overlaps reader navigation on narrow viewports.
   devIndicators: false,
   poweredByHeader: false,

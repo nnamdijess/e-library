@@ -13,6 +13,8 @@ from app.api import router
 from app.body_limits import BodyLimits
 from app.config import Settings
 from app.database import make_engine, require_current_schema
+from app.maintenance import data_lease
+from app.version import APP_VERSION
 
 
 class HealthResponse(BaseModel):
@@ -26,15 +28,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_application):
-        try:
-            if not (settings.data_dir / "library.sqlite3").is_file():
-                raise RuntimeError("Database missing. From backend run: python -m app.cli migrate")
-            require_current_schema(engine)
-            yield
-        finally:
-            engine.dispose()
+        with data_lease(settings.data_dir, "server"):
+            try:
+                if not (settings.data_dir / "library.sqlite3").is_file():
+                    raise RuntimeError("Database missing. From backend run: python -m app.cli migrate")
+                require_current_schema(engine)
+                yield
+            finally:
+                engine.dispose()
 
-    application = FastAPI(title=settings.app_name, version="0.8.0", lifespan=lifespan)
+    application = FastAPI(title=settings.app_name, version=APP_VERSION, lifespan=lifespan)
     application.state.settings = settings
     application.state.engine = engine
     application.state.upload_lock = anyio.Semaphore(1)

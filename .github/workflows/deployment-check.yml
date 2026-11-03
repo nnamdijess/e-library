@@ -1,0 +1,44 @@
+name: Manual Linux deployment checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r backend/requirements.txt
+      - run: python -m pytest -q
+        working-directory: backend
+      - name: Configure isolated generated-data smoke test
+        run: |
+          mkdir -p /tmp/ebook-ci/data /tmp/ebook-ci/backups
+          cat > deploy/.env <<EOF
+          EBOOK_PUBLIC_ORIGIN=http://127.0.0.1:8787
+          EBOOK_SESSION_COOKIE_SECURE=false
+          EBOOK_DATA_PATH=/tmp/ebook-ci/data
+          EBOOK_BACKUP_PATH=/tmp/ebook-ci/backups
+          EBOOK_UID=$(id -u)
+          EBOOK_GID=$(id -g)
+          EBOOK_HTTP_PORT=8787
+          EOF
+      - name: Build and start
+        run: |
+          docker compose --env-file deploy/.env -f deploy/compose.yaml config --quiet
+          docker compose --env-file deploy/.env -f deploy/compose.yaml build
+          docker compose --env-file deploy/.env -f deploy/compose.yaml run --rm --no-deps maintenance python -m app.cli migrate
+          docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --wait --wait-timeout 120
+          curl --fail http://127.0.0.1:8787/api/v1/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/api/v1/books)" = 401
+      - name: Backup and verify stopped-server coordination
+        run: sh deploy/backup.sh
+      - name: Show failures and stop only this test stack
+        if: always()
+        run: |
+          docker compose --env-file deploy/.env -f deploy/compose.yaml logs --tail 100
+          docker compose --env-file deploy/.env -f deploy/compose.yaml down

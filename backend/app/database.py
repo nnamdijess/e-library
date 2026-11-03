@@ -10,6 +10,7 @@ from sqlalchemy import URL, create_engine, event
 from sqlalchemy.engine import Engine
 
 from app.config import Settings
+from app.maintenance import data_lease
 
 
 def make_engine(settings: Settings) -> Engine:
@@ -40,15 +41,15 @@ def migration_config() -> Config:
 
 
 def migrate(settings: Settings) -> None:
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    engine = make_engine(settings)
-    try:
-        with engine.begin() as connection:
-            config = migration_config()
-            config.attributes["connection"] = connection
-            command.upgrade(config, "head")
-    finally:
-        engine.dispose()
+    with data_lease(settings.data_dir):
+        engine = make_engine(settings)
+        try:
+            with engine.begin() as connection:
+                config = migration_config()
+                config.attributes["connection"] = connection
+                command.upgrade(config, "head")
+        finally:
+            engine.dispose()
 
 
 def require_current_schema(engine: Engine) -> None:
