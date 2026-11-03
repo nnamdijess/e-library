@@ -28,6 +28,12 @@ light/dark/sepia themes saved to your account. PDFs default to **Fit page** and
 offer **Fit width** plus 50%–300% zoom. Apply migration 0003 when upgrading.
 See [reader preferences](docs/reader-preferences.md) for behavior and verification.
 
+Use **Rename** under a book to edit its displayed title. The top-right account
+circle on the home page contains sign-in details, Sign out, and an app-wide
+theme selector. PDFs also support arrow/Page Up/Down keys and horizontal page
+swipes when the page fits horizontally; wide zoomed pages retain panning.
+See [library and navigation controls](docs/library-and-navigation.md).
+
 ## Windows setup (PowerShell)
 
 Create an isolated Python environment and install the locked dependencies:

@@ -3,7 +3,7 @@ import { LibraryAccess } from "@/components/library-access";
 
 export default function Home() {
   return (
-    <main>
+    <main className="home-shell">
       <p className="eyebrow">Personal ebook library</p>
       <h1>A home for your books.</h1>
       <p className="intro">A private catalog for your personal collection.</p>

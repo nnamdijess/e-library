@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { BookGrid, type Catalog } from "./book-grid";
 import { BookUpload } from "./book-upload";
+import { ProfileMenu } from "./profile-menu";
 
 type Identity = { user: { username: string }; csrf_token: string };
 type Phase = "loading" | "signed-out" | "signed-in" | "error";
@@ -77,6 +78,7 @@ export function LibraryAccess() {
         body: JSON.stringify({ username: fields.get("username"), password: fields.get("password") }),
       });
       form.reset();
+      window.dispatchEvent(new Event("ebook-auth-changed"));
       // Retrieve the rotated session's identity and protected catalog together.
       setAttempt((value) => value + 1);
     } catch (reason) {
@@ -96,6 +98,7 @@ export function LibraryAccess() {
         method: "POST", headers: { "X-CSRF-Token": csrf },
       });
       setIdentity(null);
+      window.dispatchEvent(new Event("ebook-auth-changed"));
       setCatalog({ items: [], total: 0, limit: 20, offset: 0 });
       setAttempt((value) => value + 1);
     } catch (reason) {
@@ -119,6 +122,7 @@ export function LibraryAccess() {
 
   return (
     <section className="connection" aria-labelledby="library-title">
+      <ProfileMenu username={identity?.user.username ?? null} loading={phase === "loading"} busy={busy || uploading || refreshing} onSignOut={() => void signOut()} />
       <h2 id="library-title">Your library</h2>
       {phase === "loading" && <p role="status">Opening your library…</p>}
       {error && <p role="alert" className="unavailable">{error}</p>}
@@ -137,10 +141,9 @@ export function LibraryAccess() {
       )}
       {phase === "signed-in" && identity && (
         <>
-          <div className="account"><p>Signed in as <strong>{identity.user.username}</strong></p><button onClick={signOut} disabled={busy || uploading || refreshing}>{busy ? "Signing out…" : "Sign out"}</button></div>
           <BookUpload csrf={csrf} maxBytes={maxUploadBytes} onUploaded={() => refreshCatalog(0)} onBusyChange={setUploading} />
           <div className="library-tools"><p>{catalog.total} {catalog.total === 1 ? "book" : "books"}</p><button className="secondary" disabled={refreshing || uploading || busy} onClick={() => navigate(catalog.offset)}>{refreshing ? "Refreshing…" : "Refresh library"}</button></div>
-          {catalog.total === 0 ? <p className="empty-library">Your library starts here. Add an EPUB or PDF above.</p> : <BookGrid books={catalog.items} />}
+          {catalog.total === 0 ? <p className="empty-library">Your library starts here. Add an EPUB or PDF above.</p> : <BookGrid books={catalog.items} csrf={csrf} onRenamed={(book) => setCatalog((current) => ({ ...current, items: current.items.map((item) => item.id === book.id ? book : item) }))} />}
           {catalog.total > catalog.limit && <nav className="pagination" aria-label="Library pages">
             <button disabled={refreshing || uploading || catalog.offset === 0} onClick={() => navigate(Math.max(0, catalog.offset - catalog.limit))}>Previous</button>
             <span>{catalog.offset + 1}–{Math.min(catalog.offset + catalog.limit, catalog.total)} of {catalog.total}</span>

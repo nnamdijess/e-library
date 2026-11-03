@@ -144,7 +144,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
   const currentChapter = chapters.find((chapter) => chapter.href.split("#")[0] === latestLocation.current?.href.split("#")[0]);
 
   return <main className="reader-page" data-theme={preferences.value.theme}>
-    <header className="reader-toolbar">
+    <header className="reader-toolbar epub-toolbar">
       <Link href="/" className="reader-back">← Library</Link>
       <div className="reader-heading"><h1>{book?.title ?? "Opening book"}</h1><p>{book?.authors.join(", ") || ""}</p></div>
       <button className="secondary" disabled={!ready || !chapters.length} aria-expanded={tocOpen} aria-controls="reader-toc" onClick={() => setTocOpen((value) => !value)}>Contents</button>

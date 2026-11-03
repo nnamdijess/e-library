@@ -19,6 +19,14 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Contents", exact: true })).toBeEnabled({ timeout: 45000 });
 }
 
+async function savedPosition(page: Page) {
+  return page.evaluate(async () => (await (await fetch(`/api/v1/books/${location.pathname.split('/').pop()}/progress`)).json()));
+}
+
+async function visibleParagraphs(page: Page) {
+  return page.frameLocator(".epub-host iframe").first().locator("p[id]").evaluateAll((paragraphs) => paragraphs.filter((paragraph) => [...paragraph.getClientRects()].some((rect) => rect.right > 0 && rect.left < innerWidth && rect.bottom > 0 && rect.top < innerHeight)).map((paragraph) => paragraph.id));
+}
+
 test("confirmed CFI survives refresh, offline retry, and a second device conflict", async ({ page, browser }, testInfo) => {
   await page.addInitScript(simulateSaveOutage);
   await signIn(page);
@@ -29,9 +37,15 @@ test("confirmed CFI survives refresh, offline retry, and a second device conflic
   await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(status).toHaveText("Synced");
-  const before = await page.locator(".reader-footer [role=status]").innerText();
+  const before = await savedPosition(page);
+  const passages = await visibleParagraphs(page);
   await page.reload();
-  await expect(page.locator(".reader-footer [role=status]")).toHaveText(before, { timeout: 45000 });
+  await expect(page.getByRole("button", { name: "Contents", exact: true })).toBeEnabled({ timeout: 45000 });
+  // CFI and passage continuity are durable. Page ordinals can move at a column
+  // boundary after reflow, especially with large fonts in mobile WebKit.
+  expect((await savedPosition(page)).location.cfi).toBe(before.location.cfi);
+  await expect(page.locator(".reader-footer [role=status]")).toContainText(`${Math.round(before.percentage * 100)}%`);
+  if (passages.length) expect((await visibleParagraphs(page)).some((id) => passages.includes(id))).toBe(true);
   // Abort only progress writes: book and login remain online. Do not equate
   // navigator.onLine with proof the server is reachable.
   await page.evaluate(() => localStorage.setItem("test-progress-outage", "1"));
@@ -54,7 +68,8 @@ test("confirmed CFI survives refresh, offline retry, and a second device conflic
     const other = await second.newPage();
     await other.goto(bookUrl);
     await expect(other.getByRole("button", { name: "Contents", exact: true })).toBeEnabled({ timeout: 45000 });
-    await expect(other.locator(".reader-footer [role=status]")).toHaveText(await page.locator(".reader-footer [role=status]").innerText());
+    const shared = await savedPosition(page);
+    await expect(other.locator(".reader-footer [role=status]")).toContainText(`${Math.round(shared.percentage * 100)}%`);
     await other.getByRole("button", { name: "Next", exact: true }).click();
     await expect(other.locator(".reader-save-note")).toHaveText("Synced");
     // First device still has its old base revision. It must not overwrite.
@@ -62,7 +77,9 @@ test("confirmed CFI survives refresh, offline retry, and a second device conflic
     await expect(page.getByRole("button", { name: "Load saved position", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Load saved position", exact: true }).click();
     await expect(status).toHaveText("Synced");
-    await expect(page.locator(".reader-footer [role=status]")).toHaveText(await other.locator(".reader-footer [role=status]").innerText());
+    const resolved = await savedPosition(other);
+    await expect(page.locator(".reader-footer [role=status]")).toContainText(`${Math.round(resolved.percentage * 100)}%`);
+    expect((await savedPosition(page)).location.cfi).toBe(resolved.location.cfi);
   } finally { await second.close(); }
   expect(page.url()).toBe(bookUrl);
 });

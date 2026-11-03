@@ -81,6 +81,11 @@ account settings, EPUB typography/themes, and PDF
 Fit page with extended zoom; see `reader-preferences.md`. Annotations and library
 organization remain later work.
 
+The approved library/navigation follow-up adds the mobile toolbar grid, title
+editing, account menu with an application-wide theme, and PDF keyboard/swipe
+navigation. See `library-and-navigation.md`. Original files and saved locations
+remain independent of editable display titles.
+
 Sources checked during Milestone 1:
 
 - [Next.js supported browsers](https://nextjs.org/docs/architecture/supported-browsers)

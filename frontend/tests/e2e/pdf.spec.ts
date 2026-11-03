@@ -25,11 +25,46 @@ test("PDF page and normalized position survive reopening", async ({ page }, test
   })).toBe(true);
   await expect(page.locator(".pdf-viewport")).toHaveAttribute("aria-busy", "false");
   await page.screenshot({ path: testInfo.outputPath("pdf-fit-page.png") });
+  const area = page.getByLabel("PDF reading area", { exact: true });
+  await area.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("img", { name: "PDF page 1" })).toBeVisible();
+  await expect(area).toHaveAttribute("aria-busy", "false");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
+  await expect(area).toHaveAttribute("aria-busy", "false");
+  const bounds = (await area.boundingBox())!;
+  const touch = { clientX: bounds.x + bounds.width / 2, clientY: bounds.y + bounds.height / 2, identifier: 1 };
+  await area.dispatchEvent("touchstart", { touches: [touch] });
+  await area.dispatchEvent("touchend", { touches: [], changedTouches: [{ ...touch, clientX: touch.clientX + 100 }] });
+  await expect(page.getByRole("img", { name: "PDF page 1" })).toBeVisible();
+  await expect(area).toHaveAttribute("aria-busy", "false");
+  await area.dispatchEvent("touchstart", { touches: [touch] });
+  await area.dispatchEvent("touchend", { touches: [], changedTouches: [{ ...touch, clientX: touch.clientX - 100 }] });
+  await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
+  await expect(area).toHaveAttribute("aria-busy", "false");
+  // A vertical drag must remain a scrolling gesture, never page backwards.
+  await area.dispatchEvent("touchstart", { touches: [touch] });
+  await area.dispatchEvent("touchmove", { touches: [{ ...touch, clientY: touch.clientY + 100 }] });
+  await area.dispatchEvent("touchend", { touches: [], changedTouches: [{ ...touch, clientX: touch.clientX + 100, clientY: touch.clientY + 100 }] });
+  await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
+  await area.dispatchEvent("touchstart", { touches: [touch, { ...touch, identifier: 2, clientX: touch.clientX + 30 }] });
+  await area.dispatchEvent("touchend", { touches: [], changedTouches: [{ ...touch, clientX: touch.clientX + 100 }] });
+  await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
   await page.getByLabel("Zoom").selectOption("300");
   // This generated fixture has a 160 x 240 point MediaBox.
   await expect(page.locator(".pdf-viewport canvas")).toHaveCSS("height", "720px");
   await expect(page.locator(".pdf-viewport")).toHaveAttribute("aria-busy", "false");
   await expect(page.getByRole("button", { name: "Previous", exact: true })).toBeEnabled();
+  // A page wider than the phone viewport must pan instead of turning pages.
+  await page.setViewportSize({ width: 320, height: 600 });
+  await expect(area).toHaveCSS("touch-action", "auto");
+  await expect(area).toHaveAttribute("aria-busy", "false");
+  const narrow = (await area.boundingBox())!;
+  const pan = { clientX: narrow.x + 100, clientY: narrow.y + 100, identifier: 1 };
+  await area.dispatchEvent("touchstart", { touches: [pan] });
+  await area.dispatchEvent("touchend", { touches: [], changedTouches: [{ ...pan, clientX: pan.clientX + 100 }] });
+  await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
   await page.locator(".pdf-viewport").evaluate((host) => { host.scrollTop = 150; });
   await expect.poll(() => page.evaluate(async () => (await (await fetch(`/api/v1/books/${location.pathname.split('/').pop()}/progress`)).json()).location.offset)).toBeGreaterThan(0);
   await expect(page.locator(".reader-save-note")).toHaveText("Synced");

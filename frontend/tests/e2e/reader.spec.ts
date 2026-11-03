@@ -13,6 +13,12 @@ test("read, paginate, navigate chapters, resize, and return to the library", asy
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("link", { name: /Read book\s*:\s*Reader fixture/ }).click();
   await expect(page.getByRole("button", { name: "Contents", exact: true })).toBeEnabled({ timeout: 45000 });
+  if (testInfo.project.use.hasTouch) {
+    const contentsBox = await page.getByRole("button", { name: "Contents", exact: true }).boundingBox();
+    const settingsBox = await page.getByRole("button", { name: "Settings", exact: true }).boundingBox();
+    expect(Math.abs(contentsBox!.y - settingsBox!.y)).toBeLessThan(2);
+    await page.screenshot({ path: testInfo.outputPath("mobile-toolbar.png") });
+  }
   await page.getByRole("button", { name: "Contents", exact: true }).click();
   await page.getByRole("complementary").getByRole("button", { name: "First chapter", exact: true }).click();
   const readingUrl = page.url();
@@ -82,6 +88,32 @@ test("read, paginate, navigate chapters, resize, and return to the library", asy
   await expect(frame.getByRole("heading", { name: "Second chapter", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "← Library", exact: true }).click();
   await expect(page.getByRole("link", { name: /Read book\s*:\s*Reader fixture/ })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  const account = page.getByRole("region", { name: "Account details" });
+  await expect(account).toContainText("Signed in as testowner");
+  await expect(account.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await account.getByLabel("Application theme").selectOption("sepia");
+  await expect(account.locator(".preferences-status")).toHaveText("Preferences saved");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(234, 220, 193)");
+  await page.keyboard.press("Escape");
+  await expect(account).not.toBeVisible();
+  await page.getByRole("button", { name: "Rename Reader fixture", exact: true }).click();
+  await page.getByLabel("Book title", { exact: true }).fill("Reader fixture — clean Ω");
+  await page.getByRole("button", { name: "Save title", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Reader fixture — clean Ω", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Reader fixture — clean Ω", exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "sepia");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const avatar = (await page.getByRole("button", { name: "Account", exact: true }).boundingBox())!;
+  expect(avatar.y).toBeLessThan(80);
+  expect(avatar.x).toBeGreaterThan(page.viewportSize()!.width / 2);
+  await page.screenshot({ path: testInfo.outputPath("library-sepia.png"), fullPage: true });
+  await page.getByRole("button", { name: "Rename Reader fixture — clean Ω", exact: true }).click();
+  await page.getByLabel("Book title", { exact: true }).fill("Reader fixture");
+  await page.getByRole("button", { name: "Save title", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Reader fixture", exact: true })).toBeVisible();
   expect(externalRequests).toEqual([]);
   expect(errors).toEqual([]);
   await context.clearCookies();

@@ -93,3 +93,45 @@ main.reader-page { background: var(--reader-bg, #faf8f2); color: var(--reader-fg
 .reader-page .reader-toc, .reader-page .reader-conflict { background: var(--reader-bg); color: var(--reader-fg); }
 .reader-page .pdf-viewport { background: var(--reader-viewer); }
 @media (max-width: 600px) { .reader-toolbar { flex-wrap: wrap; gap: 8px; } .reader-heading { flex-basis: 40%; } .reader-toolbar label { margin-left: auto; } .reader-toolbar button { padding-inline: 10px; } }
+
+/* The same saved palette covers the library, account panel, and readers. */
+:root { --app-bg: #f6f4ef; --app-surface: #fffdf8; --app-fg: #242924; --app-muted: #555c52; --app-link: #315d43; --app-border: #c5cebd; --app-secondary: #eef1e9; --app-error: #9b3728; background: var(--app-bg); color: var(--app-fg); }
+:root[data-theme="sepia"] { --app-bg: #eadcc1; --app-surface: #f2e4cb; --app-fg: #493823; --app-muted: #65523b; --app-link: #694218; --app-border: #b6a181; --app-secondary: #e6d5b6; --app-error: #96372a; }
+:root[data-theme="dark"] { color-scheme: dark; --app-bg: #151b18; --app-surface: #1e2421; --app-fg: #e5e7de; --app-muted: #b9c0b6; --app-link: #a4d6b1; --app-border: #536155; --app-secondary: #303c33; --app-error: #ffa99a; }
+body { background: var(--app-bg); color: var(--app-fg); }
+a, .read-book { color: var(--app-link); }
+.connection, .profile-panel { background: var(--app-surface); color: var(--app-fg); border-color: var(--app-border); }
+.intro, .book-author, .book-facts, .footnote, .empty-library, #upload-help, .profile-role { color: var(--app-muted); }
+.eyebrow, .connected { color: var(--app-link); }
+.unavailable, .reader-error { color: var(--app-error); }
+.footnote, .upload-form { border-color: var(--app-border); }
+button.secondary, .reader-toc li button { background: var(--app-secondary); color: var(--app-fg); border-color: var(--app-border); }
+input, select { color: var(--app-fg); background: var(--app-surface); border-color: var(--app-border); }
+select { font: inherit; min-height: 44px; border: 1px solid var(--app-border); border-radius: 6px; padding: 8px; }
+.home-shell { position: relative; }
+.home-shell > .eyebrow { padding-right: 64px; }
+.profile-area { position: absolute; top: 24px; right: 24px; z-index: 20; }
+.profile-circle { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border-radius: 50%; border: 1px solid var(--app-border); font-weight: 700; }
+.profile-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(320px, calc(100vw - 40px)); padding: 20px; border: 1px solid var(--app-border); border-radius: 14px; box-shadow: 0 8px 32px #0004; overflow-wrap: anywhere; }
+.profile-panel label, .profile-panel select { display: block; width: 100%; }
+.profile-panel select { margin-top: 8px; }
+.profile-role { font-size: .85rem; }
+.rename-link { background: transparent; color: var(--app-link); padding: 4px 0; font-size: .85rem; text-decoration: underline; }
+.rename-link:hover { background: transparent; }
+.rename-book { margin-block: 8px; }
+.rename-book label { margin-top: 4px; font-size: .85rem; }
+.rename-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rename-actions button { font-size: .8rem; padding: 8px 10px; }
+.pdf-viewport:focus-visible { outline: 2px solid var(--app-link); outline-offset: -3px; }
+@media (max-width: 600px) {
+  .epub-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .epub-toolbar .reader-back { grid-column: 1; grid-row: 1; }
+  .epub-toolbar .reader-heading { grid-column: 1 / -1; grid-row: 2; }
+  .epub-toolbar > button:first-of-type { grid-column: 2; grid-row: 1; }
+  .epub-toolbar > button:last-of-type { grid-column: 3; grid-row: 1; }
+  .pdf-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .pdf-toolbar .reader-back { grid-column: 1; grid-row: 1; }
+  .pdf-toolbar .reader-heading { grid-column: 2 / -1; grid-row: 1; }
+  .pdf-toolbar > label { grid-column: 1 / 3; grid-row: 2; display: flex; align-items: center; gap: 8px; margin: 0; }
+  .pdf-toolbar > button { grid-column: 3; grid-row: 2; }
+}

@@ -30,6 +30,8 @@ export function PdfReader({ bookId }: { bookId: string }) {
   const ready = useRef(false);
   const enabled = useRef(false);
   const [restoreRevision, setRestoreRevision] = useState(0);
+  const navigationPending = useRef(false);
+  const gesture = useRef<{ x: number; y: number; time: number } | null>(null);
 
   useEffect(() => {
     if (!preferences.ready) return;
@@ -118,6 +120,7 @@ export function PdfReader({ bookId }: { bookId: string }) {
       latest.current = { version: 1, format: "pdf", page, offset: restoreOffset.current };
       restoreOffset.current = 0;
       setRendered(true);
+      navigationPending.current = false;
       if (!ready.current) { ready.current = true; progress.current?.enable(); }
       // Scroll events from restoring/clamping a zoomed page are presentation
       // changes, not evidence the reader moved to a different passage.
@@ -128,22 +131,62 @@ export function PdfReader({ bookId }: { bookId: string }) {
   }, [document, page, zoom, size, restoreRevision]);
 
   function navigate(next: number) {
-    if (!document || !rendered) return;
+    if (!document || !rendered || navigationPending.current) return;
     const destination = Math.max(1, Math.min(document.numPages, next));
     if (destination === page) return;
+    navigationPending.current = true;
     latest.current = { version: 1, format: "pdf", page: destination, offset: 0 };
     restoreOffset.current = 0;
     progress.current?.record(latest.current, (destination - 1) / document.numPages);
     setPage(destination);
   }
 
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setSettingsOpen(false); return; }
+      if (settingsOpen || sync.conflict || !rendered || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input,textarea,select,a,[contenteditable]:not([contenteditable=false]),.reader-settings,.reader-conflict")) return;
+      if (["ArrowRight", "PageDown", "ArrowLeft", "PageUp"].includes(event.key)) {
+        event.preventDefault();
+        navigate(page + (["ArrowRight", "PageDown"].includes(event.key) ? 1 : -1));
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [page, document, rendered, settingsOpen, sync.conflict]);
+
+  const swipeEnabled = rendered && !settingsOpen && !sync.conflict && Boolean(canvas.current && canvas.current.offsetWidth <= size.width + 2);
+
   return <main className="reader-page" data-theme={preferences.value.theme}>
-    <header className="reader-toolbar"><Link href="/" className="reader-back">← Library</Link><div className="reader-heading"><h1>{title}</h1></div><label>Zoom <select disabled={!preferences.ready || !rendered} value={zoom} onChange={(event) => { restoreOffset.current = latest.current.offset; preferences.update({ pdf_zoom: event.target.value as typeof zoom }); }}><option value="fit-page">Fit page</option><option value="fit-width">Fit width</option>{[50, 75, 100, 125, 150, 175, 200, 250, 300].map((percent) => <option key={percent} value={String(percent)}>{percent}%</option>)}</select></label><button className="secondary" disabled={!preferences.ready} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Settings</button></header>
+    <header className="reader-toolbar pdf-toolbar"><Link href="/" className="reader-back">← Library</Link><div className="reader-heading"><h1>{title}</h1></div><label>Zoom <select disabled={!preferences.ready || !rendered} value={zoom} onChange={(event) => { restoreOffset.current = latest.current.offset; preferences.update({ pdf_zoom: event.target.value as typeof zoom }); }}><option value="fit-page">Fit page</option><option value="fit-width">Fit width</option>{[50, 75, 100, 125, 150, 175, 200, 250, 300].map((percent) => <option key={percent} value={String(percent)}>{percent}%</option>)}</select></label><button className="secondary" disabled={!preferences.ready} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Settings</button></header>
     <div className="reader-messages"><p className="reader-save-note" role="status">{sync.message}</p>{sync.conflict && <div className="reader-conflict"><button onClick={() => void progress.current?.resolve(true)}>Load saved position</button><button onClick={() => void progress.current?.resolve(false, latest.current, document ? (page - 1 + latest.current.offset) / document.numPages : 0)}>Keep this position</button></div>}{error && <div className="reader-error" role="alert">{error}<button onClick={() => setAttempt((value) => value + 1)}>Reopen book</button></div>}</div>
     {!preferences.ready && <p>{preferences.status} <button onClick={preferences.retry}>Retry preferences</button></p>}
     <div className="pdf-reading-area">
     {settingsOpen && <ReaderSettings value={preferences.value} update={preferences.update} status={preferences.status} onClose={() => setSettingsOpen(false)} />}
-    <div className="pdf-viewport" ref={viewport} aria-busy={!rendered} onScroll={() => {
+    <div className="pdf-viewport" ref={viewport} tabIndex={0} aria-label="PDF reading area" aria-busy={!rendered}
+      style={{ touchAction: swipeEnabled ? "pan-y pinch-zoom" : "auto" }}
+      onTouchStart={(event) => {
+        gesture.current = null;
+        if (!swipeEnabled || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1.05) return;
+        const touch = event.touches[0], bounds = event.currentTarget.getBoundingClientRect();
+        if (touch.clientX - bounds.left < 24 || bounds.right - touch.clientX < 24) return;
+        gesture.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+      }}
+      onTouchMove={(event) => {
+        if (!gesture.current) return;
+        if (event.touches.length !== 1) { gesture.current = null; return; }
+        const dx = Math.abs(event.touches[0].clientX - gesture.current.x), dy = Math.abs(event.touches[0].clientY - gesture.current.y);
+        if (dy > 30 && dy > dx) gesture.current = null;
+      }}
+      onTouchCancel={() => { gesture.current = null; }}
+      onTouchEnd={(event) => {
+        const start = gesture.current; gesture.current = null;
+        if (!start || !swipeEnabled || event.touches.length || event.changedTouches.length !== 1) return;
+        const dx = event.changedTouches[0].clientX - start.x, dy = event.changedTouches[0].clientY - start.y;
+        if (Date.now() - start.time <= 700 && Math.abs(dx) >= 64 && Math.abs(dx) > Math.abs(dy) * 1.7) navigate(page + (dx < 0 ? 1 : -1));
+      }}
+      onScroll={() => {
       if (!enabled.current || !rendered || !viewport.current || !canvas.current || !document) return;
       if (programmaticTop.current !== null && Math.abs(viewport.current.scrollTop - programmaticTop.current) < 1) return;
       programmaticTop.current = null;

@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from anyio import WouldBlock
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -199,6 +199,19 @@ class CatalogResponse(BaseModel):
     offset: int
 
 
+class BookTitleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    title: str = Field(min_length=1, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, value: str):
+        value = value.strip()
+        if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("Enter a nonempty title without control characters.")
+        return value
+
+
 class UploadResponse(BaseModel):
     book: BookResponse
     duplicate: bool
@@ -260,6 +273,17 @@ def book(book_id: str, db: Database, user: Owner):
     item = db.scalar(select(Book).where(Book.id == book_id, Book.owner_id == user.id))
     if item is None:
         fail(404, "book_not_found", "Book not found.")
+    return item
+
+
+@router.patch("/books/{book_id}", response_model=BookResponse)
+def rename_book(book_id: str, body: BookTitleUpdate, db: Database, user: Owner, _csrf: CsrfSession):
+    item = book(book_id, db, user)
+    owner_id = user.id
+    db.commit()  # Release authorization reads before updating only this field.
+    db.execute(update(Book).where(Book.id == book_id, Book.owner_id == owner_id).values(title=body.title))
+    db.commit()
+    db.refresh(item)
     return item
 
 

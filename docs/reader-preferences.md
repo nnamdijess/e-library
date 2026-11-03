@@ -28,7 +28,8 @@ The six-million-pixel canvas budget remains in place at high zoom.
   devices merge; the last server write wins when both change the same field.
 - `frontend/src/readers/preferences.ts` loads account settings before displaying
   the reader, debounces saves for 500ms, serializes updates and retries failures.
-  Opening a reader or returning focus retrieves the current account settings.
+  Its root-level provider shares settings across the library and readers;
+  starting the app or returning focus retrieves the current account settings.
 - `reader-settings.tsx` supplies the shared settings panel. The EPUB adapter
   applies controlled CSS without changing the underlying document tree, reflows
   at the current CFI, and retains that CFI until the reader navigates again.
