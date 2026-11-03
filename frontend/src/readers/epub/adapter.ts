@@ -1,5 +1,6 @@
 import { Book, type Contents, type Location, type Rendition, type NavItem } from "epubjs";
 import type { Chapter, EpubLocation, PageState, ReaderController } from "../types";
+import { DEFAULT_PREFERENCES, FONTS, PALETTES, type ReaderPreferences } from "../preferences";
 
 type Callbacks = {
   onLocation: (location: EpubLocation, page: PageState) => void;
@@ -24,11 +25,19 @@ export class EpubAdapter implements ReaderController {
   private opened = false;
   private destroyed = false;
   private observing = false;
+  private preferences: ReaderPreferences;
+  private retainedCfi: string | undefined;
+  private currentCfi: string | undefined;
+  private applying = false;
   private linkCleanups = new Map<number, () => void>();
 
-  constructor(private host: HTMLElement, private artifactVersion: number, private callbacks: Callbacks) {}
+  constructor(private host: HTMLElement, private artifactVersion: number, private callbacks: Callbacks, preferences = DEFAULT_PREFERENCES) { this.preferences = preferences; }
 
   async open(data: ArrayBuffer, initialLocation?: string): Promise<void> {
+    // A restored passage may begin inside a newly reflowed page. Keep its
+    // exact anchor until deliberate navigation, rather than saving the earlier
+    // page boundary when the initial ResizeObserver notification arrives.
+    this.retainedCfi = initialLocation;
     try {
       await this.book.open(data, "binary");
       await this.book.ready;
@@ -48,14 +57,16 @@ export class EpubAdapter implements ReaderController {
       });
       this.rendition.on("relocated", (location: Location) => {
         if (this.disposed || !location?.start?.cfi) return;
+        const cfi = this.retainedCfi ?? location.start.cfi;
+        this.currentCfi = cfi;
         this.callbacks.onLocation({
           version: 1, format: "epub", artifact_version: this.artifactVersion,
-          cfi: location.start.cfi, href: location.start.href,
+          cfi, href: location.start.href,
         }, {
           atStart: location.atStart, atEnd: location.atEnd,
           section: location.start.index + 1,
           page: location.start.displayed.page, pages: location.start.displayed.total,
-          percentage: location.atEnd ? 1 : Math.max(0, Math.min(1, this.book.locations.percentageFromCfi(location.start.cfi) || 0)),
+          percentage: location.atEnd ? 1 : Math.max(0, Math.min(1, this.book.locations.percentageFromCfi(cfi) || 0)),
         });
         // EPUB.js can only restore a view after resizing once its first CFI
         // has been reported. A resize before then clears the view permanently.
@@ -67,6 +78,7 @@ export class EpubAdapter implements ReaderController {
       this.rendition.on("keydown", (event: KeyboardEvent) => this.keydown(event));
       this.rendition.on("displayError", () => { if (!this.disposed) this.callbacks.onError(); });
       this.rendition.hooks.content.register((contents: Contents) => this.handleLinks(contents));
+      this.applyTheme();
       this.rendition.hooks.unloaded.register((view: { section: { index: number } }) => {
         const index = view.section.index;
         this.linkCleanups.get(index)?.();
@@ -74,7 +86,7 @@ export class EpubAdapter implements ReaderController {
       });
       this.observer = new ResizeObserver(() => {
         const { width, height } = this.host.getBoundingClientRect();
-        if (!this.disposed && width > 0 && height > 0) this.rendition?.resize(Math.floor(width), Math.floor(height));
+        if (!this.disposed && !this.applying && width > 0 && height > 0) this.rendition?.resize(Math.floor(width), Math.floor(height));
       });
       await this.move(() => this.rendition!.display(initialLocation));
     } finally {
@@ -128,9 +140,36 @@ export class EpubAdapter implements ReaderController {
     } finally { clearTimeout(timer); rendition.off("relocated", finish); }
   }
 
-  async next() { await this.move(() => this.rendition!.next()); }
-  async previous() { await this.move(() => this.rendition!.prev()); }
-  async display(location: string) { await this.move(() => this.rendition!.display(location)); }
+  async next() { this.retainedCfi = undefined; await this.move(() => this.rendition!.next()); }
+  async previous() { this.retainedCfi = undefined; await this.move(() => this.rendition!.prev()); }
+  async display(location: string) { this.retainedCfi = undefined; await this.move(() => this.rendition!.display(location)); }
+
+  private applyTheme() {
+    const { font_family, font_size, line_height, theme } = this.preferences;
+    const palette = PALETTES[theme];
+    this.rendition!.themes.default({
+      "html, body": { background: `${palette.background} !important`, color: `${palette.foreground} !important` },
+      "body": { "font-family": `${FONTS[font_family]} !important`, "font-size": `${font_size}px !important`, "line-height": `${line_height} !important` },
+      "body *": { "font-family": `${FONTS[font_family]} !important`, color: "inherit !important", "background-color": "transparent !important" },
+      "p, li, div, span, td, th": { "font-size": "inherit !important", "line-height": `${line_height} !important` },
+      "a": { color: `${palette.link} !important` },
+    });
+  }
+
+  async setPreferences(preferences: ReaderPreferences) {
+    const changed = JSON.stringify(this.preferences) !== JSON.stringify(preferences);
+    this.preferences = preferences;
+    if (!changed || !this.rendition || this.disposed) return;
+    this.applying = true;
+    this.retainedCfi = this.currentCfi;
+    try {
+      const { width, height } = this.host.getBoundingClientRect();
+      this.rendition.resize(Math.floor(width), Math.floor(height));
+      this.applyTheme();
+      this.rendition.clear();
+      await this.move(() => this.rendition!.display(this.retainedCfi));
+    } finally { this.applying = false; }
+  }
 
   private release() {
     if (this.destroyed) return;

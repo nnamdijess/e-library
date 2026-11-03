@@ -88,3 +88,15 @@ class ReadingProgress(Base):
     revision: Mapped[int] = mapped_column()
     update_id: Mapped[str] = mapped_column(String(36))
     updated_at: Mapped[int] = mapped_column()
+
+
+class ReaderPreferences(Base):
+    __tablename__ = "reader_preferences"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    font_family: Mapped[str] = mapped_column(String(20))
+    font_size: Mapped[int] = mapped_column()
+    line_height: Mapped[float] = mapped_column(Float)
+    margin: Mapped[int] = mapped_column()
+    theme: Mapped[str] = mapped_column(String(10))
+    pdf_zoom: Mapped[str] = mapped_column(String(12))

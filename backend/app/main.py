@@ -34,7 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             engine.dispose()
 
-    application = FastAPI(title=settings.app_name, version="0.6.0", lifespan=lifespan)
+    application = FastAPI(title=settings.app_name, version="0.7.0", lifespan=lifespan)
     application.state.settings = settings
     application.state.engine = engine
     application.state.upload_lock = anyio.Semaphore(1)

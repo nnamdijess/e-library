@@ -23,6 +23,11 @@ run `npm.cmd ci` in `frontend/`. Stop the backend, back up `data/`, and run
 `python -m app.cli migrate` from `backend/` to add revisioned reading progress.
 Existing books get version 2 reading copies lazily; originals remain unchanged.
 
+Reader **Settings** now provides EPUB fonts, size, spacing, margins, and
+light/dark/sepia themes saved to your account. PDFs default to **Fit page** and
+offer **Fit width** plus 50%–300% zoom. Apply migration 0003 when upgrading.
+See [reader preferences](docs/reader-preferences.md) for behavior and verification.
+
 ## Windows setup (PowerShell)
 
 Create an isolated Python environment and install the locked dependencies:

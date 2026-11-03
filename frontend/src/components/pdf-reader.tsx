@@ -6,18 +6,23 @@ import { api, ApiError } from "@/lib/api";
 import { ProgressSession, type SyncState } from "@/readers/progress";
 import type { PdfLocation } from "@/readers/types";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { useReaderPreferences } from "@/readers/preferences";
+import { ReaderSettings } from "./reader-settings";
 
 export function PdfReader({ bookId }: { bookId: string }) {
+  const preferences = useReaderPreferences();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const progress = useRef<ProgressSession | null>(null);
   const latest = useRef<PdfLocation>({ version: 1, format: "pdf", page: 1, offset: 0 });
   const restoreOffset = useRef(0);
+  const programmaticTop = useRef<number | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [title, setTitle] = useState("Opening PDF");
   const [page, setPage] = useState(1);
-  const [zoom, setZoom] = useState(1);
-  const [size, setSize] = useState(0);
+  const zoom = preferences.value.pdf_zoom;
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [rendered, setRendered] = useState(false);
   const [sync, setSync] = useState<SyncState>({ message: "Loading saved position…", conflict: false });
   const [error, setError] = useState("");
@@ -27,6 +32,7 @@ export function PdfReader({ bookId }: { bookId: string }) {
   const [restoreRevision, setRestoreRevision] = useState(0);
 
   useEffect(() => {
+    if (!preferences.ready) return;
     let active = true;
     let owned: PDFDocumentProxy | null = null;
     let task: ReturnType<typeof import("pdfjs-dist").getDocument> | null = null;
@@ -71,17 +77,21 @@ export function PdfReader({ bookId }: { bookId: string }) {
       progress.current = null;
       void task?.destroy();
     };
-  }, [bookId, attempt]);
+  }, [bookId, attempt, preferences.ready]);
 
   useEffect(() => {
     if (!viewport.current) return;
-    const observer = new ResizeObserver(([entry]) => { restoreOffset.current = latest.current.offset; setSize(Math.floor(entry.contentRect.width)); });
+    const observer = new ResizeObserver(([entry]) => {
+      restoreOffset.current = latest.current.offset;
+      const width = Math.floor(entry.contentRect.width), height = Math.floor(entry.contentRect.height);
+      setSize((current) => current.width === width && current.height === height ? current : { width, height });
+    });
     observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    if (!document || !canvas.current || !viewport.current || !size) return;
+    if (!document || !canvas.current || !viewport.current || !size.width || !size.height) return;
     let active = true;
     let rendering: RenderTask | undefined;
     const host = viewport.current;
@@ -92,8 +102,9 @@ export function PdfReader({ bookId }: { bookId: string }) {
       const pdfPage = await document!.getPage(page);
       if (!active) return;
       const base = pdfPage.getViewport({ scale: 1 });
-      // ResizeObserver's content width already excludes the viewport padding.
-      const scale = Math.max(.1, size / base.width) * zoom;
+      // Both dimensions exclude padding. Fit-page keeps the entire page
+      // visible on a wide monitor; percentages use PDF's natural page size.
+      const scale = zoom === "fit-page" ? Math.min(size.width / base.width, size.height / base.height) * .995 : zoom === "fit-width" ? size.width / base.width : Number(zoom) / 100;
       const view = pdfPage.getViewport({ scale });
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(6_000_000 / (view.width * view.height)));
       target.width = Math.max(1, Math.floor(view.width * pixelRatio));
@@ -103,10 +114,13 @@ export function PdfReader({ bookId }: { bookId: string }) {
       await rendering.promise;
       if (!active) return;
       host.scrollTop = restoreOffset.current * target.offsetHeight;
+      programmaticTop.current = host.scrollTop;
       latest.current = { version: 1, format: "pdf", page, offset: restoreOffset.current };
       restoreOffset.current = 0;
       setRendered(true);
       if (!ready.current) { ready.current = true; progress.current?.enable(); }
+      // Scroll events from restoring/clamping a zoomed page are presentation
+      // changes, not evidence the reader moved to a different passage.
       enabled.current = true;
     }
     void render().catch((reason) => { if (active && reason?.name !== "RenderingCancelledException") setError(`PDF page ${page} could not be rendered. Try reopening the book.`); });
@@ -123,15 +137,21 @@ export function PdfReader({ bookId }: { bookId: string }) {
     setPage(destination);
   }
 
-  return <main className="reader-page">
-    <header className="reader-toolbar"><Link href="/" className="reader-back">← Library</Link><div className="reader-heading"><h1>{title}</h1></div><label>Zoom <select value={zoom} onChange={(event) => { restoreOffset.current = latest.current.offset; setZoom(Number(event.target.value)); }}><option value={1}>Fit width</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label></header>
+  return <main className="reader-page" data-theme={preferences.value.theme}>
+    <header className="reader-toolbar"><Link href="/" className="reader-back">← Library</Link><div className="reader-heading"><h1>{title}</h1></div><label>Zoom <select disabled={!preferences.ready || !rendered} value={zoom} onChange={(event) => { restoreOffset.current = latest.current.offset; preferences.update({ pdf_zoom: event.target.value as typeof zoom }); }}><option value="fit-page">Fit page</option><option value="fit-width">Fit width</option>{[50, 75, 100, 125, 150, 175, 200, 250, 300].map((percent) => <option key={percent} value={String(percent)}>{percent}%</option>)}</select></label><button className="secondary" disabled={!preferences.ready} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Settings</button></header>
     <div className="reader-messages"><p className="reader-save-note" role="status">{sync.message}</p>{sync.conflict && <div className="reader-conflict"><button onClick={() => void progress.current?.resolve(true)}>Load saved position</button><button onClick={() => void progress.current?.resolve(false, latest.current, document ? (page - 1 + latest.current.offset) / document.numPages : 0)}>Keep this position</button></div>}{error && <div className="reader-error" role="alert">{error}<button onClick={() => setAttempt((value) => value + 1)}>Reopen book</button></div>}</div>
+    {!preferences.ready && <p>{preferences.status} <button onClick={preferences.retry}>Retry preferences</button></p>}
+    <div className="pdf-reading-area">
+    {settingsOpen && <ReaderSettings value={preferences.value} update={preferences.update} status={preferences.status} onClose={() => setSettingsOpen(false)} />}
     <div className="pdf-viewport" ref={viewport} aria-busy={!rendered} onScroll={() => {
       if (!enabled.current || !rendered || !viewport.current || !canvas.current || !document) return;
+      if (programmaticTop.current !== null && Math.abs(viewport.current.scrollTop - programmaticTop.current) < 1) return;
+      programmaticTop.current = null;
       const offset = Math.max(0, Math.min(1, viewport.current.scrollTop / canvas.current.offsetHeight));
       latest.current = { version: 1, format: "pdf", page, offset };
       progress.current?.record(latest.current, (page - 1 + offset) / document.numPages);
-    }}><canvas ref={canvas} role="img" aria-label={`PDF page ${page}`} />{!rendered && !error && <p role="status">Rendering PDF page…</p>}</div>
+    }}><canvas ref={canvas} role="img" aria-label={`PDF page ${page}`} />{!rendered && !error && <p className="pdf-loading" role="status">Rendering PDF page…</p>}</div>
+    </div>
     <footer className="reader-footer"><button disabled={!rendered || page <= 1} onClick={() => navigate(page - 1)}>Previous</button><p role="status">Page {page} / {document?.numPages ?? "…"} · {document ? Math.round((page - 1 + latest.current.offset) / document.numPages * 100) : 0}%</p><button disabled={!rendered || !document || page >= document.numPages} onClick={() => navigate(page + 1)}>Next</button></footer>
   </main>;
 }

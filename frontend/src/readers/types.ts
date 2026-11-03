@@ -1,3 +1,5 @@
+import type { ReaderPreferences } from "./preferences";
+
 export type EpubLocation = {
   version: 1;
   format: "epub";
@@ -16,5 +18,6 @@ export interface ReaderController {
   next(): Promise<void>;
   previous(): Promise<void>;
   display(location: string): Promise<void>;
+  setPreferences(preferences: ReaderPreferences): Promise<void>;
   destroy(): void;
 }

@@ -76,8 +76,10 @@ Automated browser tests pass in desktop Chromium, an Android-style touch layout,
 and an iPhone-style WebKit layout. Actual Android/iPhone device tests remain
 separate acceptance checks. The owner subsequently authorized EPUB compatibility,
 progress persistence and basic PDF reading. See `epub-compatibility.md` and
-`reading-progress.md`. Advanced reader preferences, annotations and library
-organization still require a small reviewed stage.
+`reading-progress.md`. The subsequently approved reader-preferences stage adds
+account settings, EPUB typography/themes, and PDF
+Fit page with extended zoom; see `reader-preferences.md`. Annotations and library
+organization remain later work.
 
 Sources checked during Milestone 1:
 

@@ -20,6 +20,7 @@ from app.storage import StorageFailure, ingest_book, storage_path
 from app.epub_artifact import ARTIFACT_VERSION
 from app.reader_service import cached_copy, ensure_reading_copy
 from app.progress import ProgressUpdate, get_progress, save_progress, snapshot
+from app.preferences import Preferences, PreferencesPatch, load_preferences, patch_preferences
 
 router = APIRouter(prefix="/api/v1")
 COOKIE = "ebook_session"
@@ -77,6 +78,19 @@ def require_csrf(request: Request, db: Database) -> LoginSession:
 
 
 CsrfSession = Annotated[LoginSession, Depends(require_csrf)]
+
+
+@router.get("/preferences", response_model=Preferences)
+def preferences(db: Database, user: Owner):
+    return load_preferences(db, user.id)
+
+
+@router.patch("/preferences", response_model=Preferences)
+def edit_preferences(body: PreferencesPatch, db: Database, user: Owner, _csrf: CsrfSession):
+    try:
+        return patch_preferences(db, user.id, body)
+    except ValueError:
+        fail(422, "invalid_preferences", "Preference values cannot be null.")
 
 
 def issue_session(request: Request, response: Response, db: Session, user_id: int | None) -> str:

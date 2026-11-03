@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("PDF page and normalized position survive reopening", async ({ page }) => {
+test("PDF page and normalized position survive reopening", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
@@ -18,11 +18,16 @@ test("PDF page and normalized position survive reopening", async ({ page }) => {
   await expect(page.getByRole("img", { name: "PDF page 2" })).toBeVisible();
   await expect(page.locator(".reader-save-note")).toHaveText("Synced");
   await page.setViewportSize({ width: 844, height: 390 });
-  await page.getByLabel("Zoom").selectOption("1.5");
+  await page.getByLabel("Zoom").selectOption("fit-page");
   await expect.poll(() => page.locator(".pdf-viewport").evaluate((host) => {
-    const width = host.querySelector("canvas")!.getBoundingClientRect().width;
-    return Math.abs(width - (host.clientWidth - 24) * 1.5) < 2;
+    const canvas = host.querySelector("canvas")!.getBoundingClientRect();
+    return canvas.height <= host.clientHeight - 24 && canvas.width <= host.clientWidth - 24;
   })).toBe(true);
+  await expect(page.locator(".pdf-viewport")).toHaveAttribute("aria-busy", "false");
+  await page.screenshot({ path: testInfo.outputPath("pdf-fit-page.png") });
+  await page.getByLabel("Zoom").selectOption("300");
+  // This generated fixture has a 160 x 240 point MediaBox.
+  await expect(page.locator(".pdf-viewport canvas")).toHaveCSS("height", "720px");
   await expect(page.locator(".pdf-viewport")).toHaveAttribute("aria-busy", "false");
   await expect(page.getByRole("button", { name: "Previous", exact: true })).toBeEnabled();
   await page.locator(".pdf-viewport").evaluate((host) => { host.scrollTop = 150; });

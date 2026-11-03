@@ -5,11 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { Chapter, EpubLocation, PageState, ReaderController } from "@/readers/types";
 import { ProgressSession, type SyncState } from "@/readers/progress";
+import { useReaderPreferences } from "@/readers/preferences";
+import { ReaderSettings } from "./reader-settings";
 
 type BookInfo = { title: string; format: "epub" | "pdf"; authors: string[] };
 type ReadingCopy = { artifact_version: number; content_url: string; warnings: string[] };
 
 export function EpubReader({ bookId }: { bookId: string }) {
+  const preferences = useReaderPreferences();
+  const preferencesRef = useRef(preferences.value);
+  preferencesRef.current = preferences.value;
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<ReaderController | null>(null);
   const pending = useRef(false);
@@ -44,6 +50,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
   }
 
   useEffect(() => {
+    if (!preferences.ready) return;
     let active = true;
     let owned: ReaderController | null = null;
     const session = new ProgressSession(bookId, (state) => { if (active) setSync(state); }, async (location) => {
@@ -88,7 +95,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
         onKeyboard: (direction) => { if (active) void navigate(direction); },
         onLink: (href) => { if (active) void navigate({ href }); },
         onError: () => { if (active) setError("This chapter could not be displayed. Try another chapter."); },
-      });
+      }, preferencesRef.current);
       engine.current = owned;
       await owned.open(data, saved?.format === "epub" ? saved.cfi : undefined);
       if (active) { setReady(true); setNotices(copy.warnings); session.enable(); }
@@ -98,7 +105,7 @@ export function EpubReader({ bookId }: { bookId: string }) {
     }).finally(() => clearTimeout(timeout));
 
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setTocOpen(false); return; }
+      if (event.key === "Escape") { setTocOpen(false); setSettingsOpen(false); return; }
       if (!active || pending.current || !engine.current || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.target instanceof HTMLElement && event.target.closest("input,textarea,select,button,a")) return;
       if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
@@ -117,25 +124,43 @@ export function EpubReader({ bookId }: { bookId: string }) {
       if (progress.current === session) progress.current = null;
       if (engine.current === owned) engine.current = null;
     };
-  }, [bookId, attempt]);
+  }, [bookId, attempt, preferences.ready]);
+
+  useEffect(() => {
+    if (!ready || !engine.current) return;
+    // Serialize reflows and keep the latest selection if a slider moves again.
+    let active = true;
+    async function apply() {
+      if (pending.current) { setTimeout(() => { if (active) void apply(); }, 100); return; }
+      pending.current = true; setMoving(true);
+      try { await engine.current?.setPreferences(preferencesRef.current); }
+      catch { if (active) setError("Reading settings could not be applied. Reopen the book to retry."); }
+      finally { pending.current = false; if (active) setMoving(false); }
+    }
+    void apply();
+    return () => { active = false; };
+  }, [preferences.value, ready]);
 
   const currentChapter = chapters.find((chapter) => chapter.href.split("#")[0] === latestLocation.current?.href.split("#")[0]);
 
-  return <main className="reader-page">
+  return <main className="reader-page" data-theme={preferences.value.theme}>
     <header className="reader-toolbar">
       <Link href="/" className="reader-back">← Library</Link>
       <div className="reader-heading"><h1>{book?.title ?? "Opening book"}</h1><p>{book?.authors.join(", ") || ""}</p></div>
       <button className="secondary" disabled={!ready || !chapters.length} aria-expanded={tocOpen} aria-controls="reader-toc" onClick={() => setTocOpen((value) => !value)}>Contents</button>
+      <button className="secondary" disabled={!ready} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Settings</button>
     </header>
     <div className="reader-messages">
       <p className="reader-save-note" role="status">{sync.message}</p>
+      {!preferences.ready && <p>{preferences.status} <button onClick={preferences.retry}>Retry preferences</button></p>}
       {sync.conflict && <div className="reader-conflict"><button className="secondary" onClick={() => void progress.current?.resolve(true)}>Load saved position</button><button className="secondary" onClick={() => void progress.current?.resolve(false, latestLocation.current ?? undefined, page?.percentage)}>Keep this position</button></div>}
       {notices.length > 0 && <details><summary>Book notices</summary><ul>{notices.map((notice, index) => <li key={index}>{notice}</li>)}</ul></details>}
       {error && <div role="alert" className="reader-error"><span>{error}</span><button className="secondary" onClick={() => setAttempt((value) => value + 1)}>Reopen book</button></div>}
     </div>
     <div className="reader-content">
       {!ready && !error && <p className="reader-loading" role="status">Preparing your book…</p>}
-      <div ref={host} className="epub-host" aria-label="Book content" />
+      <div className="epub-page-area" style={{ paddingInline: `min(${preferences.value.margin}px, 12vw)` }}><div ref={host} className="epub-host" aria-label="Book content" /></div>
+      {settingsOpen && <ReaderSettings epub value={preferences.value} update={preferences.update} status={preferences.status} onClose={() => setSettingsOpen(false)} />}
       {tocOpen && <aside id="reader-toc" className="reader-toc" aria-label="Table of contents">
         <div className="account"><h2>Contents</h2><button className="secondary" onClick={() => setTocOpen(false)}>Close</button></div>
         <ol>{chapters.map((chapter, index) => <li key={`${chapter.href}-${index}`} style={{ paddingInlineStart: `${Math.min(chapter.depth, 4) * 12}px` }}><button disabled={moving} onClick={() => void navigate({ href: chapter.href })}>{chapter.label}</button></li>)}</ol>
